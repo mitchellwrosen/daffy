@@ -1,0 +1,7 @@
+name: daffy
+
+executables:
+  daffy:
+    main: Main.hs
+    dependencies:
+      - base
