@@ -1,7 +1,33 @@
 name: daffy
 
+ghc-options: -freverse-errors -Wall
+
+default-extensions:
+  - BangPatterns
+  - LambdaCase
+  - OverloadedStrings
+  - ScopedTypeVariables
+
+library:
+  source-dirs: src
+  dependencies:
+    - base
+    - process
+    - temporary
+    - text
+
 executables:
   daffy:
+    source-dirs: app
     main: Main.hs
+    ghc-options: -threaded
     dependencies:
+      - aeson
       - base
+      - bytestring
+      - daffy
+      - http-types
+      - text
+      - unordered-containers
+      - wai
+      - warp
