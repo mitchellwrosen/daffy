@@ -10,22 +10,26 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: BangPatterns LambdaCase OverloadedStrings ScopedTypeVariables
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
   ghc-options: -freverse-errors -Wall
   build-depends:
-      base
+      aeson
+    , attoparsec
+    , base
+    , bytestring
     , process
     , temporary
     , text
   exposed-modules:
       Daffy
+      Daffy.Stats
   default-language: Haskell2010
 
 executable daffy
   main-is: Main.hs
   hs-source-dirs:
       app
-  default-extensions: BangPatterns LambdaCase OverloadedStrings ScopedTypeVariables
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
   ghc-options: -freverse-errors -Wall -threaded
   build-depends:
       aeson
@@ -37,4 +41,18 @@ executable daffy
     , unordered-containers
     , wai
     , warp
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  ghc-options: -freverse-errors -Wall
+  build-depends:
+      base
+    , bytestring
+    , daffy
+    , hspec
   default-language: Haskell2010

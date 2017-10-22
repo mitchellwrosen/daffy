@@ -3,7 +3,7 @@ module Main where
 import qualified Daffy
 
 import Control.Monad
-import Data.Aeson (encode)
+import Data.Aeson (Value, encode, toJSON)
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
 import Network.HTTP.Types.Status (status200, status404, status500)
@@ -41,12 +41,9 @@ app prog args req resp =
           resp (responseLBS status500 [] (encode json))
 
         Right stats -> do
-          let json :: HashMap Text (HashMap Text Text)
-              json = HashMap.singleton "stats" (HashMap.fromList stats)
+          let json :: HashMap Text Value
+              json = HashMap.singleton "stats" (toJSON stats)
 
           resp (responseLBS status200 [] (encode json))
 
     _ -> resp (responseLBS status404 [] "")
-
-  -- Daffy.run (head args) (tail args)
-  --   >>= print

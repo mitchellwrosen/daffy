@@ -1,0 +1,47 @@
+    Alloc    Copied     Live     GC     GC      TOT      TOT  Page Flts
+    bytes     bytes     bytes   user   elap     user     elap
+  1113976     27680    117752  0.000  0.000    0.000    0.002    0    0  (Gen:  0)
+  1044688     26128    117688  0.000  0.000    0.000    0.003    0    0  (Gen:  0)
+  1044632     27696    116728  0.000  0.000    0.001    0.004    0    0  (Gen:  1)
+  1045040      1856    116872  0.001  0.000    0.002    0.004    0    0  (Gen:  0)
+  1044560      2416    117528  0.001  0.000    0.003    0.005    0    0  (Gen:  0)
+  1044872      1960    117136  0.001  0.000    0.004    0.005    0    0  (Gen:  0)
+  1044584      2064    117496  0.001  0.000    0.005    0.006    0    0  (Gen:  0)
+  1044560      1864    117424  0.000  0.000    0.006    0.006    0    0  (Gen:  0)
+   523288      1624    117256  0.000  0.000    0.007    0.007    0    0  (Gen:  0)
+   522032      1648    117528  0.000  0.000    0.008    0.007    0    0  (Gen:  0)
+   522560      1576    117520  0.000  0.000    0.008    0.008    0    0  (Gen:  0)
+   522264      1424    117400  0.000  0.000    0.009    0.008    0    0  (Gen:  0)
+   452928     26584     66408  0.000  0.000    0.010    0.009    0    0  (Gen:  1)
+      464                      0.000  0.000
+
+      10,970,448 bytes allocated in the heap
+         124,520 bytes copied during GC
+         116,728 bytes maximum residency (2 sample(s))
+          34,824 bytes maximum slop
+               2 MB total memory in use (0 MB lost due to fragmentation)
+
+                                     Tot time (elapsed)  Avg pause  Max pause
+  Gen  0        11 colls,    11 par    0.002s   0.000s     0.0000s    0.0001s
+  Gen  1         2 colls,     1 par    0.001s   0.000s     0.0002s    0.0002s
+
+  Parallel GC work balance: 43.39% (serial 0%, perfect 100%)
+
+  TASKS: 6 (1 bound, 5 peak workers (5 total), using -N2)
+
+  SPARKS: 1 (1 converted, 0 overflowed, 0 dud, 0 GC'd, 0 fizzled)
+
+  INIT    time    0.000s  (  0.001s elapsed)
+  MUT     time    0.007s  (  0.007s elapsed)
+  GC      time    0.003s  (  0.001s elapsed)
+  EXIT    time    0.001s  (  0.001s elapsed)
+  Total   time    0.010s  (  0.009s elapsed)
+
+  Alloc rate    1,680,264,665 bytes per MUT second
+
+  Productivity  72.2% of total user, 79.9% of total elapsed
+
+gc_alloc_block_sync: 0
+whitehole_spin: 0
+gen[0].sync: 0
+gen[1].sync: 0

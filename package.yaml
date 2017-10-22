@@ -4,14 +4,21 @@ ghc-options: -freverse-errors -Wall
 
 default-extensions:
   - BangPatterns
+  - DeriveGeneric
+  - DuplicateRecordFields
   - LambdaCase
+  - NamedFieldPuns
   - OverloadedStrings
+  - RecordWildCards
   - ScopedTypeVariables
 
 library:
   source-dirs: src
   dependencies:
+    - aeson
+    - attoparsec
     - base
+    - bytestring
     - process
     - temporary
     - text
@@ -31,3 +38,13 @@ executables:
       - unordered-containers
       - wai
       - warp
+
+tests:
+  spec:
+    source-dirs: test
+    main: Spec.hs
+    dependencies:
+      - base
+      - bytestring
+      - daffy
+      - hspec

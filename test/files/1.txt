@@ -1,0 +1,39 @@
+    Alloc    Copied     Live     GC     GC      TOT      TOT  Page Flts
+    bytes     bytes     bytes   user   elap     user     elap
+   573288      4024     61352  0.000  0.000    0.000    0.001    0    0  (Gen:  0)
+   522088      2248     61392  0.000  0.000    0.001    0.002    0    0  (Gen:  0)
+   522496      3448     60776  0.000  0.000    0.001    0.002    0    0  (Gen:  1)
+   522216       224     60744  0.000  0.000    0.002    0.003    0    0  (Gen:  0)
+   522560       488     61056  0.000  0.000    0.002    0.003    0    0  (Gen:  0)
+   522376       384     60984  0.000  0.000    0.003    0.004    0    0  (Gen:  0)
+   522008       536     61264  0.000  0.000    0.003    0.004    0    0  (Gen:  0)
+   522424       728     61520  0.000  0.000    0.004    0.005    0    0  (Gen:  0)
+   522216       384     61224  0.000  0.000    0.004    0.005    0    0  (Gen:  0)
+   522512       536     61560  0.000  0.000    0.005    0.006    0    0  (Gen:  0)
+   522248       584     61672  0.000  0.000    0.005    0.006    0    0  (Gen:  0)
+   522400       344     61464  0.000  0.000    0.006    0.007    0    0  (Gen:  0)
+   447816      3488     44384  0.000  0.000    0.006    0.007    0    0  (Gen:  1)
+        0                      0.000  0.000
+
+       6,766,648 bytes allocated in the heap
+          17,416 bytes copied during GC
+          60,776 bytes maximum residency (2 sample(s))
+          21,152 bytes maximum slop
+               1 MB total memory in use (0 MB lost due to fragmentation)
+
+                                     Tot time (elapsed)  Avg pause  Max pause
+  Gen  0        11 colls,     0 par    0.000s   0.000s     0.0000s    0.0001s
+  Gen  1         2 colls,     0 par    0.000s   0.000s     0.0001s    0.0001s
+
+  INIT    time    0.000s  (  0.000s elapsed)
+  MUT     time    0.006s  (  0.007s elapsed)
+  GC      time    0.000s  (  0.000s elapsed)
+  EXIT    time    0.000s  (  0.000s elapsed)
+  Total   time    0.006s  (  0.007s elapsed)
+
+  %GC     time       5.4%  (5.2% elapsed)
+
+  Alloc rate    1,194,254,853 bytes per MUT second
+
+  Productivity  94.6% of total user, 92.0% of total elapsed
+
