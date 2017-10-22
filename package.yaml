@@ -31,7 +31,6 @@ executables:
     dependencies:
       - aeson
       - base
-      - bytestring
       - daffy
       - http-types
       - text
