@@ -1,12 +1,16 @@
 module Main where
 
+import Daffy (DaffyException)
+
 import qualified Daffy
 
+import Control.Exception (fromException)
 import Control.Monad
 import Data.Aeson (Value, encode, toJSON)
 import Data.HashMap.Strict (HashMap)
 import Data.Text (Text)
-import Network.HTTP.Types.Status (status200, status404, status500)
+import Network.HTTP.Types.Status
+  (Status, status200, status400, status404, status500)
 import Network.Wai
 import System.Environment
 import System.Exit
@@ -38,7 +42,13 @@ app prog args req resp =
           let json :: HashMap Text Text
               json = HashMap.singleton "error" (Text.pack (show ex))
 
-          resp (responseLBS status500 [] (encode json))
+          let status :: Status
+              status =
+                case fromException ex of
+                  Just (_ :: DaffyException) -> status500
+                  _ -> status400
+
+          resp (responseLBS status [] (encode json))
 
         Right stats -> do
           let json :: HashMap Text Value
