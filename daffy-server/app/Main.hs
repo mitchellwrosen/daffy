@@ -211,7 +211,7 @@ runCommand conn command = do
       Left _ ->
         v2 ("{\"eventlog\": true}, but " ++ eventlog ++ " not found")
       Right (Left err) ->
-        throw (EventlogParseException err)
+        io (throw (EventlogParseException err))
       Right (Right (GHC.dat -> GHC.Data events)) ->
         forM_ events (sendEvent conn)
 #endif

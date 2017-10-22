@@ -1,7 +1,6 @@
 module Main exposing (..)
 
 import DaffyTypes exposing (..)
-
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
@@ -10,6 +9,7 @@ import Json.Decode exposing (..)
 import Json.Encode
 import Step exposing (Step)
 import WebSocket
+
 
 main : Program Never Model Msg
 main =
@@ -229,11 +229,11 @@ view model =
                         , label
                             []
                             [ input
-                              [ type_ "checkbox"
-                              , Html.Events.onCheck ToggleStats
-                              , Html.Attributes.checked model_.stats
-                              ]
-                              []
+                                [ type_ "checkbox"
+                                , Html.Events.onCheck ToggleStats
+                                , Html.Attributes.checked model_.stats
+                                ]
+                                []
                             , text "Stats"
                             ]
                         ]
@@ -316,6 +316,7 @@ viewTable columns elements =
    "payload" = (stdout|stderr -> String) ("exitcode" -> Int) (stats -> Maybe Stats)
 
 -}
+
 
 testStats : Stats
 testStats =

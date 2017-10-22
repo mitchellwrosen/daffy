@@ -6,3 +6,4 @@ daffy-server/codegen
 dist/
 dist-newstyle/
 elm-stuff/
+static/daffy.js
