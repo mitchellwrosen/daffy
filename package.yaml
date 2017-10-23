@@ -34,7 +34,6 @@ executables:
       - daffy
       - http-types
       - text
-      - unordered-containers
       - wai
       - warp
 
@@ -44,6 +43,6 @@ tests:
     main: Spec.hs
     dependencies:
       - base
-      - bytestring
       - daffy
       - hspec
+      - text

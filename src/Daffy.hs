@@ -1,3 +1,5 @@
+{-# options_ghc -fno-warn-name-shadowing #-}
+
 module Daffy
   ( run
   ) where
@@ -6,36 +8,35 @@ import Daffy.Exception
 import Daffy.Stats (Stats(..), parseStats)
 
 import Control.Exception
-import Data.ByteString (ByteString)
+import Data.Text (Text)
 import System.Exit
 import System.IO.Temp
 import System.Process
 
-import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Char8 as Char8
+import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 
 -- | Run a program, returning either any exception thrown or the runtime stats
 -- that the run produced.
 run :: String -> [String] -> IO Stats
-run prog args =
+run path args =
   withTempFile "." "daffy" $ \temp h -> do
-    let spec :: CreateProcess
-        spec = proc prog (args ++ ["+RTS", "-S" ++ temp])
+    let args' :: [String]
+        args' = args ++ ["+RTS", "-S" ++ temp]
 
     (Nothing, Nothing, Nothing, ph) <-
-      createProcess spec
+      createProcess (proc path args')
 
     code :: ExitCode <-
       waitForProcess ph
 
     case code of
-      ExitFailure _ -> throwIO code
+      ExitFailure code -> throwIO (DaffyExitCodeException path args' code)
       ExitSuccess -> do
-        contents <- ByteString.hGetContents h
+        contents <- Text.hGetContents h
         case parseStats (dropLine contents) of
-          Left s -> throwIO (DaffyStatsParseException s)
+          Left s -> throwIO (DaffyStatsParseException contents s)
           Right stats -> pure stats
 
-
-dropLine :: ByteString -> ByteString
-dropLine = ByteString.tail . Char8.dropWhile (/= '\n')
+dropLine :: Text -> Text
+dropLine = Text.tail . snd . Text.break (== '\n')

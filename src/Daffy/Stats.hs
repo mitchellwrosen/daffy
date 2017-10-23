@@ -16,8 +16,10 @@ module Daffy.Stats
 import Control.Applicative
 import Data.Aeson (ToJSON)
 import Data.Attoparsec.ByteString.Char8
-import Data.ByteString (ByteString)
+import Data.Text (Text)
 import GHC.Generics (Generic)
+
+import qualified Data.Text.Encoding as Text (encodeUtf8)
 
 data Stats = Stats
   { garbageCollections           :: ![GCStats]
@@ -91,8 +93,8 @@ data Time = Time
 
 instance ToJSON Time
 
-parseStats :: ByteString -> Either String Stats
-parseStats = parseOnly statsParser
+parseStats :: Text -> Either String Stats
+parseStats = parseOnly statsParser . Text.encodeUtf8
 
 statsParser :: Parser Stats
 statsParser = do
