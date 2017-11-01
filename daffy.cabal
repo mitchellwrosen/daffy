@@ -14,16 +14,23 @@ library
   ghc-options: -freverse-errors -Wall
   build-depends:
       aeson
+    , async
     , attoparsec
     , base
     , bytestring
-    , process
+    , managed
+    , process >= 1.5 && < 1.6
+    , safe-exceptions
+    , stm
+    , streaming
     , temporary
     , text
+    , transformers
   exposed-modules:
       Daffy
       Daffy.Exception
       Daffy.Info
+      Daffy.Process
       Daffy.Stats
   default-language: Haskell2010
 

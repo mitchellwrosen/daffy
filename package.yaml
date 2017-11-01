@@ -16,12 +16,18 @@ library:
   source-dirs: src
   dependencies:
     - aeson
+    - async
     - attoparsec
     - base
     - bytestring
-    - process
+    - managed
+    - process >= 1.5 && < 1.6
+    - safe-exceptions
+    - stm
+    - streaming
     - temporary
     - text
+    - transformers
 
 executables:
   daffy:
