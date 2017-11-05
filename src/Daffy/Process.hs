@@ -5,7 +5,7 @@ module Daffy.Process
 
 import Control.Applicative
 import Control.Exception.Safe (SomeException, try)
-import Control.Concurrent.Async (waitCatchSTM, withAsync)
+import Control.Concurrent.Async (waitSTM, withAsync)
 import Control.Concurrent.STM (STM, atomically)
 import Control.Concurrent.STM.TQueue
   (TQueue, newTQueueIO, readTQueue, writeTQueue)
@@ -61,40 +61,24 @@ spawn path = do
       a2 <- lift (using (managed (withAsync enqueueStderr)))
       a3 <- lift (using (managed (withAsync (waitForProcess ph))))
 
-      let loop :: Stream (Of Output) m (Either SomeException ExitCode)
-          loop = join (liftIO (atomically (act1 <|> act2 <|> act3)))
+      let loop :: Stream (Of Output) m ExitCode
+          loop = join (liftIO (atomically (act1 <|> act2)))
            where
-            -- Yield stdout/stderr, if available.
-            act1 :: STM (Stream (Of Output) m (Either SomeException ExitCode))
+            act1 :: STM (Stream (Of Output) m ExitCode)
             act1 = do
               out <- readTQueue output
               pure $ do
                 Streaming.yield out
                 loop
 
-            -- Wait for stdout handle to close. If successful, go back to
-            -- yielding; if there is nothing to yield, wait for the process to
-            -- exit.
-            act2 :: STM (Stream (Of Output) m (Either SomeException ExitCode))
-            act2 =
-              waitCatchSTM a1 >>= \case
-                Left ex -> pure (pure (Left ex))
-                Right () -> act1 <|> act4
+            act2 :: STM (Stream (Of Output) m ExitCode)
+            act2 = do
+              waitSTM a1
+              waitSTM a2
+              code <- waitSTM a3
+              pure (pure code)
 
-            -- Wait for stderr handle to close. If successful, go back to
-            -- yielding; if there is nothing to yield, wait for the process to
-            -- exit.
-            act3 :: STM (Stream (Of Output) m (Either SomeException ExitCode))
-            act3 =
-              waitCatchSTM a2 >>= \case
-                Left ex -> pure (pure (Left ex))
-                Right () -> act1 <|> act4
-
-            -- Wait for the process to exit.
-            act4 :: STM (Stream (Of Output) m (Either SomeException ExitCode))
-            act4 = pure <$> waitCatchSTM a3
-
-      loop
+      Right <$> loop
  where
   spec :: CreateProcess
   spec = CreateProcess
