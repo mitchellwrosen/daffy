@@ -7,6 +7,7 @@ default-extensions:
   - DeriveGeneric
   - DuplicateRecordFields
   - LambdaCase
+  - MultiWayIf
   - NamedFieldPuns
   - OverloadedStrings
   - RecordWildCards
@@ -42,6 +43,34 @@ executables:
       - text
       - wai
       - warp
+
+  daffy-socket-server:
+    source-dirs: app
+    main: SocketServer.hs
+    other-modules: []
+    ghc-options: -threaded
+    dependencies:
+      - base
+      - bytestring
+      - containers
+      - daffy
+      - directory
+      - managed
+      - mtl
+      - network
+      - safe-exceptions
+      - streaming
+      - text
+
+  daffy-console-client:
+    source-dirs: app
+    main: ConsoleClient.hs
+    other-modules: []
+    dependencies:
+      - base
+      - bytestring
+      - managed
+      - network
 
 tests:
   spec:

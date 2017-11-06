@@ -10,7 +10,7 @@ cabal-version:  >= 1.10
 library
   hs-source-dirs:
       src
-  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
   ghc-options: -freverse-errors -Wall
   build-depends:
       aeson
@@ -38,7 +38,7 @@ executable daffy
   main-is: Main.hs
   hs-source-dirs:
       app
-  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
   ghc-options: -freverse-errors -Wall -threaded
   build-depends:
       aeson
@@ -48,6 +48,42 @@ executable daffy
     , text
     , wai
     , warp
+  other-modules:
+      ConsoleClient
+      SocketServer
+  default-language: Haskell2010
+
+executable daffy-console-client
+  main-is: ConsoleClient.hs
+  hs-source-dirs:
+      app
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  ghc-options: -freverse-errors -Wall
+  build-depends:
+      base
+    , bytestring
+    , managed
+    , network
+  default-language: Haskell2010
+
+executable daffy-socket-server
+  main-is: SocketServer.hs
+  hs-source-dirs:
+      app
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  ghc-options: -freverse-errors -Wall -threaded
+  build-depends:
+      base
+    , bytestring
+    , containers
+    , daffy
+    , directory
+    , managed
+    , mtl
+    , network
+    , safe-exceptions
+    , streaming
+    , text
   default-language: Haskell2010
 
 test-suite spec
@@ -55,7 +91,7 @@ test-suite spec
   main-is: Spec.hs
   hs-source-dirs:
       test
-  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
+  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
   ghc-options: -freverse-errors -Wall
   build-depends:
       base
