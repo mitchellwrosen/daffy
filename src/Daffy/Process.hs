@@ -1,18 +1,20 @@
 module Daffy.Process
-  ( Output(..)
-  , ProcessSnapshot(..)
+  ( Process
+  , Output(..)
   , spawn
-  , snapshot
+    -- * Some debugging functions
+  , debugShowProcess
+  , debugReadProcess
   ) where
 
 import Control.Applicative
-import Control.Concurrent
-import Control.Concurrent.Async (waitSTM, withAsync)
+import Control.Concurrent.Async (Async)
 import Control.Concurrent.STM
-import Control.Monad (join, unless)
+import Control.Concurrent.STM.TSem
+import Control.Monad (unless)
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Managed (Managed, MonadManaged, managed, using, with)
-import Control.Monad.Trans.Class (lift)
+import Control.Monad.Managed (Managed, managed)
+import Data.Sequence (Seq, (|>))
 import Data.Text (Text)
 import Streaming (Stream)
 import Streaming.Prelude (Of)
@@ -22,7 +24,9 @@ import System.Process
   (CmdSpec(ShellCommand), CreateProcess(..), StdStream(CreatePipe, NoStream),
     createProcess, waitForProcess)
 
+import qualified Control.Concurrent.Async as Async
 import qualified Data.Text.IO as Text
+import qualified Streaming (effect)
 import qualified Streaming.Prelude as Streaming
 
 data Output
@@ -30,51 +34,90 @@ data Output
   | Stderr Text
   deriving (Eq, Show)
 
--- | Spawn a shell command and stream its output, terminating with the process's
--- exit code.
-spawn :: forall m.  MonadManaged m => String -> Stream (Of Output) m ExitCode
-spawn path = do
-  (Nothing, Just hout, Just herr, ph) <- liftIO (createProcess spec)
+-- | A 'Process' is either still 'Running' or has 'Completed'.
+data Process
+  = Running (Seq Output) (Stream (Of Output) IO ExitCode)
+  | Completed (Seq Output) ExitCode
 
-  output :: TQueue Output <-
-    liftIO newTQueueIO
+-- | Spawn a managed 'Process'.
+spawn :: String -> Managed (IO Process)
+spawn path = do
+  (Nothing, Just hout, Just herr, ph) <-
+    liftIO (createProcess spec)
+
+  outputSeq :: TVar (Seq Output) <-
+    liftIO (newTVarIO mempty)
+
+  outputChan :: TChan Output <-
+    liftIO newBroadcastTChanIO
+
+  doneSem :: TSem <-
+    liftIO (atomically (newTSem (-1)))
+
+  let append :: Output -> STM ()
+      append x = do
+        modifyTVar' outputSeq (|> x)
+        writeTChan outputChan x
 
   let enqueueStdout :: IO ()
-      enqueueStdout =
-        Streaming.mapM_
-          (atomically . writeTQueue output . Stdout)
-          (fromHandle hout)
+      enqueueStdout = do
+        Streaming.mapM_ (atomically . append . Stdout) (fromHandle hout)
+        atomically (signalTSem doneSem)
 
   let enqueueStderr :: IO ()
-      enqueueStderr =
-        Streaming.mapM_
-          (atomically . writeTQueue output . Stderr)
-          (fromHandle herr)
+      enqueueStderr = do
+        Streaming.mapM_ (atomically . append . Stderr) (fromHandle herr)
+        atomically (signalTSem doneSem)
 
   -- Three concurrent actions: reading stdout, reading stderr, and waiting
   -- for the process to end.
-  a1 <- lift (using (managed (withAsync enqueueStdout)))
-  a2 <- lift (using (managed (withAsync enqueueStderr)))
-  a3 <- lift (using (managed (withAsync (waitForProcess ph))))
+  a1 :: Async () <-
+    async enqueueStdout
+  a2 :: Async () <-
+    async enqueueStderr
+  a3 :: Async ExitCode <-
+    async (waitForProcess ph)
 
-  let loop :: Stream (Of Output) m ExitCode
-      loop = join (liftIO (atomically (act1 <|> act2)))
-       where
-        act1 :: STM (Stream (Of Output) m ExitCode)
-        act1 = do
-          out <- readTQueue output
-          pure $ do
-            Streaming.yield out
-            loop
+  let waitCode :: STM ExitCode
+      waitCode = do
+        Async.waitSTM a1
+        Async.waitSTM a2
+        Async.waitSTM a3
 
-        act2 :: STM (Stream (Of Output) m ExitCode)
-        act2 = do
-          waitSTM a1
-          waitSTM a2
-          code <- waitSTM a3
-          pure (pure code)
+  let readCompletedProcess :: STM Process
+      readCompletedProcess = do
+        code <- waitCode
+        output <- readTVar outputSeq
+        pure (Completed output code)
 
-  loop
+  let readRunningProcess :: STM Process
+      readRunningProcess = do
+        output :: Seq Output <-
+          readTVar outputSeq
+
+        chan :: TChan Output <-
+          dupTChan outputChan
+
+        let stream :: Stream (Of Output) IO ExitCode
+            stream = Streaming.effect (atomically (act1 <|> act2))
+             where
+              act1 :: STM (Stream (Of Output) IO ExitCode)
+              act1 = do
+                out <- readTChan chan
+                pure (do
+                  Streaming.yield out
+                  stream)
+
+              act2 :: STM (Stream (Of Output) IO ExitCode)
+              act2 = do
+                waitTSem doneSem
+                code <- waitCode
+                pure (pure code)
+
+        pure (Running output stream)
+
+  pure (atomically (readCompletedProcess <|> readRunningProcess))
+
  where
   spec :: CreateProcess
   spec = CreateProcess
@@ -95,66 +138,23 @@ spawn path = do
     , use_process_jobs = False
     }
 
--- | The snapshot of a (still running?) process: either its output so far and
--- a stream of the remaining output terminated by an exit code, or all of its
--- output and its exit code.
-data ProcessSnapshot
-  = ProcessRunning [Output] (Stream (Of Output) IO ExitCode)
-  | ProcessFinished [Output] ExitCode
+debugShowProcess :: Process -> String
+debugShowProcess = \case
+  Running output _ -> "Running " ++ show output
+  Completed output code -> "Completed " ++ show output ++ " " ++ show code
 
-snapshot :: Stream (Of Output) Managed ExitCode -> IO (IO ProcessSnapshot)
-snapshot output = do
-  outputChan :: TChan (Maybe Output) <-
-    newBroadcastTChanIO
+debugReadProcess :: Process -> IO ()
+debugReadProcess = \case
+  Running output stream -> do
+    mapM_ print output
+    code <- Streaming.mapM_ print (stream)
+    print code
+  Completed output code -> do
+    mapM_ print output
+    print code
 
-  seenVar :: TVar [Output] <-
-    newTVarIO []
-
-  codeVar :: TMVar ExitCode <-
-    newEmptyTMVarIO
-
-  -- FIXME: Ehh... better handling of exceptions
-  _ <-
-    forkIO $ do
-      code :: ExitCode <-
-        with
-          (Streaming.mapM_
-            (\out ->
-              liftIO . atomically $ do
-                writeTChan outputChan (Just out)
-                modifyTVar' seenVar (out:))
-            output)
-          pure
-
-      atomically $ do
-        writeTChan outputChan Nothing
-        putTMVar codeVar code
-
-  let act1 :: STM ProcessSnapshot
-      act1 = do
-        code <- readTMVar codeVar
-        seen <- readTVar seenVar
-        pure (ProcessFinished seen code)
-
-  let act2 :: STM ProcessSnapshot
-      act2 = do
-        seen :: [Output] <-
-          readTVar seenVar
-
-        chan :: TChan (Maybe Output) <-
-          dupTChan outputChan
-
-        let stream :: Stream (Of Output) IO ExitCode
-            stream =
-              liftIO (atomically (readTChan chan)) >>= \case
-                Just out -> do
-                  Streaming.yield out
-                  stream
-                Nothing -> liftIO (atomically (readTMVar codeVar))
-
-        pure (ProcessRunning seen stream)
-
-  pure (atomically (act1 <|> act2))
+async :: IO a -> Managed (Async a)
+async m = managed (Async.withAsync m)
 
 fromHandle :: MonadIO m => Handle -> Stream (Of Text) m ()
 fromHandle h = loop

@@ -21,6 +21,7 @@ library:
     - attoparsec
     - base
     - bytestring
+    - containers
     - managed
     - process >= 1.5 && < 1.6
     - safe-exceptions
