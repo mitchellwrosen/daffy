@@ -1,6 +1,8 @@
--- This file has been generated from package.yaml by hpack version 0.17.1.
+-- This file has been generated from package.yaml by hpack version 0.20.0.
 --
 -- see: https://github.com/sol/hpack
+--
+-- hash: 88f75f0cfc929700fa14d7a5f03875397c9d83f4121795d35c4a1a7bb32aa4cc
 
 name:           daffy
 version:        0.0.0
@@ -20,7 +22,7 @@ library
     , bytestring
     , containers
     , managed
-    , process >= 1.5 && < 1.6
+    , process >=1.5 && <1.6
     , safe-exceptions
     , stm
     , streaming
@@ -31,8 +33,11 @@ library
       Daffy
       Daffy.Exception
       Daffy.Info
+      Daffy.Prelude
       Daffy.Process
       Daffy.Stats
+  other-modules:
+      Paths_daffy
   default-language: Haskell2010
 
 executable daffy
@@ -49,42 +54,9 @@ executable daffy
     , text
     , wai
     , warp
+    , websockets
   other-modules:
-      ConsoleClient
-      SocketServer
-  default-language: Haskell2010
-
-executable daffy-console-client
-  main-is: ConsoleClient.hs
-  hs-source-dirs:
-      app
-  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
-  ghc-options: -freverse-errors -Wall
-  build-depends:
-      base
-    , bytestring
-    , managed
-    , network
-  default-language: Haskell2010
-
-executable daffy-socket-server
-  main-is: SocketServer.hs
-  hs-source-dirs:
-      app
-  default-extensions: BangPatterns DeriveGeneric DuplicateRecordFields LambdaCase MultiWayIf NamedFieldPuns OverloadedStrings RecordWildCards ScopedTypeVariables
-  ghc-options: -freverse-errors -Wall -threaded
-  build-depends:
-      base
-    , bytestring
-    , containers
-    , daffy
-    , directory
-    , managed
-    , mtl
-    , network
-    , safe-exceptions
-    , streaming
-    , text
+      Paths_daffy
   default-language: Haskell2010
 
 test-suite spec
@@ -99,4 +71,6 @@ test-suite spec
     , daffy
     , hspec
     , text
+  other-modules:
+      Paths_daffy
   default-language: Haskell2010
