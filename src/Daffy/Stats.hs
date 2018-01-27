@@ -13,11 +13,8 @@ module Daffy.Stats
   , parseStats
   ) where
 
-import Control.Applicative
 import Data.Aeson (ToJSON)
 import Data.Attoparsec.ByteString.Char8
-import Data.Text (Text)
-import GHC.Generics (Generic)
 
 import qualified Data.Text.Encoding as Text (encodeUtf8)
 

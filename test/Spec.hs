@@ -2,7 +2,7 @@ module Main where
 
 import Daffy.Stats
 
-import Data.Either
+import System.Directory
 import Test.Hspec
 
 import qualified Data.Text.IO as Text
@@ -13,10 +13,10 @@ main = hspec spec
 spec :: Spec
 spec = do
   describe "parsing -S files" $ do
-    it "files/1.txt" $ do
-      contents <- Text.readFile "test/files/1.txt"
-      parseStats contents `shouldSatisfy` isRight
+    files :: [FilePath] <-
+      runIO (listDirectory "test/files/stats")
 
-    it "files/2.txt" $ do
-      contents <- Text.readFile "test/files/2.txt"
-      parseStats contents `shouldSatisfy` isRight
+    forM_ files $ \file ->
+      it file $ do
+        contents <- Text.readFile ("test/files/stats/" ++ file)
+        parseStats contents `shouldSatisfy` isRight
