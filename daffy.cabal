@@ -81,12 +81,15 @@ executable daffy
   build-depends:
       aeson
     , base-noprelude
+    , bytestring
     , daffy
     , daffy-prelude
+    , typed-process
     , websockets
   default-extensions:
     DeriveGeneric
     NamedFieldPuns
+    OverloadedStrings
     ScopedTypeVariables
   default-language: Haskell2010
 

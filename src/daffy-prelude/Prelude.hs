@@ -5,12 +5,14 @@ module Prelude
   ) where
 
 import Control.Applicative as X
+import Control.Concurrent as X (forkIO, threadDelay)
+import Control.Concurrent.MVar as X
 import Control.Concurrent.STM as X
 import Control.Monad as X
 import Control.Monad.IO.Class as X
 import Control.Monad.Managed as X
 import Control.Exception as X (Exception)
-import Control.Exception.Safe as X (throw)
+import Control.Exception.Safe as X (catchAny, finally, throw)
 import Data.ByteString as X (ByteString)
 import Data.Either as X
 import Data.Function as X ((&))
