@@ -30,19 +30,19 @@ matrix:
   include:
     - compiler: "ghc-8.0.1"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.0.1], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.0.1-prof], sources: [hvr-ghc]}}
     - compiler: "ghc-8.0.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.0.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.0.2-prof], sources: [hvr-ghc]}}
     - compiler: "ghc-8.2.1"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.1], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.1-prof], sources: [hvr-ghc]}}
     - compiler: "ghc-8.2.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.2-prof], sources: [hvr-ghc]}}
     - compiler: "ghc-8.4.1"
       env: GHCHEAD=true
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.4.1], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.4.1-prof], sources: [hvr-ghc]}}
 
   allow_failures:
     - compiler: "ghc-8.4.1"
@@ -90,8 +90,8 @@ install:
       (cd "." && autoreconf -i);
     fi
   - rm -f cabal.project.freeze
-  - cabal new-build -w ${HC} ${TEST} ${BENCH} --project-file="cabal.project" --dep -j2 all
-  - cabal new-build -w ${HC} --disable-tests --disable-benchmarks --project-file="cabal.project" --dep -j2 all
+  - cabal new-build -w ${HC} -O0 ${TEST} ${BENCH} --project-file="cabal.project" --dep -j2 all
+  - cabal new-build -w ${HC} -O0 --disable-tests --disable-benchmarks --project-file="cabal.project" --dep -j2 all
   - rm -rf "."/.ghc.environment.* "."/dist
   - DISTDIR=$(mktemp -d /tmp/dist-test.XXXX)
 
@@ -106,21 +106,21 @@ script:
   - "printf 'packages: daffy-*/*.cabal\\n' > cabal.project"
   - cat cabal.project
   # this builds all libraries and executables (without tests/benchmarks)
-  - cabal new-build -w ${HC} --disable-tests --disable-benchmarks all
+  - cabal new-build -w ${HC} -O0 --disable-tests --disable-benchmarks all
 
   # Build with installed constraints for packages in global-db
-  - if $INSTALLED; then echo cabal new-build -w ${HC} --disable-tests --disable-benchmarks $(${HCPKG} list --global --simple-output --names-only | sed 's/\([a-zA-Z0-9-]\{1,\}\) */--constraint="\1 installed" /g') all | sh; else echo "Not building with installed constraints"; fi
+  - if $INSTALLED; then echo cabal new-build -w ${HC} -O0 --disable-tests --disable-benchmarks $(${HCPKG} list --global --simple-output --names-only | sed 's/\([a-zA-Z0-9-]\{1,\}\) */--constraint="\1 installed" /g') all | sh; else echo "Not building with installed constraints"; fi
 
   # build & run tests, build benchmarks
-  - cabal new-build -w ${HC} ${TEST} ${BENCH} all
-  - if [ "x$TEST" = "x--enable-tests" ]; then cabal new-test -w ${HC} ${TEST} ${BENCH} all; fi
+  - cabal new-build -w ${HC} -O0 ${TEST} ${BENCH} all
+  - if [ "x$TEST" = "x--enable-tests" ]; then cabal new-test -w ${HC} -O0 ${TEST} ${BENCH} all; fi
 
   # cabal check
   - (cd daffy-* && cabal check)
 
   # haddock
   - rm -rf ./dist-newstyle
-  - if $HADDOCK; then cabal new-haddock -w ${HC} ${TEST} ${BENCH} all; else echo "Skipping haddock generation";fi
+  - if $HADDOCK; then cabal new-haddock -w ${HC} -O0 ${TEST} ${BENCH} all; else echo "Skipping haddock generation";fi
 
 # REGENDATA ["daffy.cabal"]
 # EOF

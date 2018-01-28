@@ -27,6 +27,8 @@ data Stats = Stats
   , runtimeInitTime              :: !Time
   , mutatorTime                  :: !Time
   , garbageCollectionTime        :: !Time
+  , retainerProfilingTime        :: !(Maybe Time)
+  , otherProfilingTime           :: !(Maybe Time)
   , runtimeShutdownTime          :: !Time
   , totalTime                    :: !Time
   , percentGarbageCollectionTime :: !(Maybe Time)
@@ -146,42 +148,23 @@ statsParser = do
   tasks <- optional tasksStatsParser
   sparks <- optional sparksStatsParser
 
-  (string "INIT") *> skipSpace
-  string "time" *> skipSpace
-  user <- double <* char 's' <* skipSpace
-  char '(' *> skipSpace
-  elapsed <- double <* char 's' <* skipSpace
-  string "elapsed)" *> skipSpace
-  let runtimeInitTime = Time{..}
+  let parseTimeBlock :: ByteString -> Parser Time
+      parseTimeBlock name = do
+        string name *> skipSpace
+        string "time" *> skipSpace
+        user <- double <* char 's' <* skipSpace
+        char '(' *> skipSpace
+        elapsed <- double <* char 's' <* skipSpace
+        string "elapsed)" *> skipSpace
+        pure Time{..}
 
-  string "MUT" *> skipSpace
-  string "time" *> skipSpace
-  user <- double <* char 's' <* skipSpace
-  char '(' *> skipSpace
-  elapsed <- double <* char 's' <* skipSpace
-  string "elapsed)" *> skipSpace
-  let mutatorTime = Time{..}
-
-  string "GC" *> skipSpace
-  string "time" *> skipSpace
-  user <- double <* char 's' <* skipSpace
-  char '(' *> skipSpace
-  elapsed <- double <* string "s elapsed)" <* skipSpace
-  let garbageCollectionTime = Time{..}
-
-  string "EXIT" *> skipSpace
-  string "time" *> skipSpace
-  user <- double <* char 's' <* skipSpace
-  char '(' *> skipSpace
-  elapsed <- double <* string "s elapsed)" <* skipSpace
-  let runtimeShutdownTime = Time{..}
-
-  string "Total" *> skipSpace
-  string "time" *> skipSpace
-  user <- double <* char 's' <* skipSpace
-  char '(' *> skipSpace
-  elapsed <- double <* string "s elapsed)" <* skipSpace
-  let totalTime = Time{..}
+  runtimeInitTime <- parseTimeBlock "INIT"
+  mutatorTime <- parseTimeBlock "MUT"
+  garbageCollectionTime <- parseTimeBlock "GC"
+  retainerProfilingTime <- optional (parseTimeBlock "RP")
+  otherProfilingTime <- optional (parseTimeBlock "PROF")
+  runtimeShutdownTime <- parseTimeBlock "EXIT"
+  totalTime <- parseTimeBlock "Total"
 
   percentGarbageCollectionTime <-
     optional $ do

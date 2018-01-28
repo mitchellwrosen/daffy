@@ -5,7 +5,6 @@ import Daffy.Stats
 
 import qualified Daffy.Info
 
-import Data.List (deleteBy)
 import System.Directory
 import System.IO.Temp
 import System.Process.Typed
@@ -82,6 +81,7 @@ statsSpec = do
                 pure ()
 
     it "vanilla" (stats "" "")
+    it "profiling" (stats "-prof" "")
     it "threaded -N1" (stats "-threaded" "-N1")
     it "threaded -N2" (stats "-threaded" "-N2")
 
