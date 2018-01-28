@@ -2,19 +2,22 @@
 
 module Daffy.Info
   ( Info(..)
-  , parseInfo
+  , Feature(..)
+  , run
   ) where
 
 import Daffy.Exception
 
 import Data.Aeson (ToJSON(toJSON))
-import System.Process (readProcess)
+import System.Process.Typed
+
+import qualified Data.ByteString.Lazy.Char8 as LChar8
 
 -- | Info about the runtime.
 data Info = Info
   { threaded :: !Bool    -- ^ Is the runtime threaded?
   , feature  :: !Feature -- ^ Vanilla, profiling, event log, or debug?
-  } deriving (Generic)
+  } deriving (Eq, Generic, Show)
 
 instance ToJSON Info
 
@@ -23,6 +26,7 @@ data Feature
   | Profiling
   | EventLog
   | Debug
+  deriving (Eq, Show)
 
 instance ToJSON Feature where
   toJSON = \case
@@ -31,22 +35,36 @@ instance ToJSON Feature where
     EventLog -> "eventlog"
     Debug -> "debug"
 
--- | Parse an 'Info' from the output of './prog +RTS --info'.
-parseInfo :: String -> IO Info
-parseInfo prog = do
-  output :: String <-
-    readProcess prog ["+RTS", "--info"] ""
+parse :: LByteString -> Maybe Info
+parse bytes = do
+  info :: [(String, String)] <-
+    readMaybe (LChar8.unpack bytes)
+  lookup "RTS way" info >>= \case
+    "rts_v" -> Just (Info False Vanilla)
+    "rts_p" -> Just (Info False Profiling)
+    "rts_l" -> Just (Info False EventLog)
+    "rts_debug" -> Just (Info False Debug)
+    "rts_thr" -> Just (Info True Vanilla)
+    "rts_thr_p" -> Just (Info True Profiling)
+    "rts_thr_l" -> Just (Info True EventLog)
+    "rts_thr_debug" -> Just (Info True Debug)
+    _ -> Nothing
 
-  case readMaybe output :: Maybe [(String, String)] of
-    Nothing -> throw (DaffyInfoParseException output)
+-- | Parse an 'Info' from the output of './prog +RTS --info'. If the program
+-- exits with non-zero exit code, or parsing fails, throws
+-- 'DaffyInfoParseException'.
+run :: String -> IO Info
+run cmd = do
+  (code, out, _) :: (ExitCode, LByteString, LByteString) <-
+    readProcess (shell (cmd ++ " +RTS --info"))
+
+  let minfo :: Maybe Info
+      minfo = do
+        ExitSuccess <- pure code
+        parse out
+
+  case minfo of
+    Nothing ->
+      throw DaffyInfoParseException
     Just info ->
-      case lookup "RTS way" info of
-        Just "rts_v"         -> pure (Info False Vanilla)
-        Just "rts_p"         -> pure (Info False Profiling)
-        Just "rts_l"         -> pure (Info False EventLog)
-        Just "rts_debug"     -> pure (Info False Debug)
-        Just "rts_thr"       -> pure (Info True Vanilla)
-        Just "rts_thr_p"     -> pure (Info True Profiling)
-        Just "rts_thr_l"     -> pure (Info True EventLog)
-        Just "rts_thr_debug" -> pure (Info True Debug)
-        _                    -> throw (DaffyInfoParseException output)
+      pure info

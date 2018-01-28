@@ -6,7 +6,7 @@ import Data.Aeson (ToJSON, (.=), object, toJSON)
 
 data DaffyException
   = DaffyStatsParseException Text String
-  | DaffyInfoParseException String
+  | DaffyInfoParseException
   deriving (Show, Typeable)
 
 instance Exception DaffyException
@@ -22,10 +22,8 @@ instance ToJSON DaffyException where
           ]
         ]
 
-    DaffyInfoParseException info ->
+    DaffyInfoParseException ->
       object
-        [ "error" .= ("failed to parse '+RTS --info' output" :: Text)
-        , "payload" .= object
-          [ "info" .= info
-          ]
+        [ "type" .= ("error" :: Text)
+        , "message" .= ("failed to parse '+RTS --info' output" :: Text)
         ]

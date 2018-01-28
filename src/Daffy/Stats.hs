@@ -146,7 +146,7 @@ statsParser = do
   tasks <- optional tasksStatsParser
   sparks <- optional sparksStatsParser
 
-  (string "INIT" <?> "oink4") *> skipSpace
+  (string "INIT") *> skipSpace
   string "time" *> skipSpace
   user <- double <* char 's' <* skipSpace
   char '(' *> skipSpace
@@ -279,4 +279,9 @@ commaSepInt :: Parser [Int]
 commaSepInt = sepBy1 decimal (char ',')
 
 percentage :: Parser Double
-percentage = double <* char '%'
+percentage =
+  dbl <* char '%'
+ where
+  dbl :: Parser Double
+  dbl = double
+    <|> optional (char '-') *> string "nan" *> pure (0/0)
