@@ -52,7 +52,7 @@ parse bytes = do
 
 -- | Parse an 'Info' from the output of './prog +RTS --info'. If the program
 -- exits with non-zero exit code, or parsing fails, throws
--- 'DaffyInfoParseException'.
+-- 'InfoParseException'.
 run :: String -> IO Info
 run cmd = do
   (code, out, _) :: (ExitCode, LByteString, LByteString) <-
@@ -65,6 +65,6 @@ run cmd = do
 
   case minfo of
     Nothing ->
-      throw DaffyInfoParseException
+      throw InfoParseException
     Just info ->
       pure info

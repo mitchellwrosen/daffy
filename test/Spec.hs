@@ -3,6 +3,7 @@ module Main where
 import Daffy.Info (Feature(..), Info(..))
 import Daffy.Stats
 
+import qualified Daffy.Eventlog
 import qualified Daffy.Info
 
 import System.Directory
@@ -19,8 +20,13 @@ main =
 
 spec :: Spec
 spec = do
+  eventlogSpec
   infoSpec
   statsSpec
+
+eventlogSpec :: Spec
+eventlogSpec =
+  pure ()
 
 infoSpec :: Spec
 infoSpec = do
