@@ -10,11 +10,11 @@ module Daffy.Stats
   , TasksStats(..)
   , SparksStats(..)
   , Time(..)
-  , parseStats
+  , parse
   ) where
 
 import Data.Aeson (ToJSON)
-import Data.Attoparsec.ByteString.Char8
+import Data.Attoparsec.ByteString.Char8 hiding (parse)
 
 import qualified Data.Text.Encoding as Text (encodeUtf8)
 
@@ -92,8 +92,9 @@ data Time = Time
 
 instance ToJSON Time
 
-parseStats :: Text -> Either String Stats
-parseStats = parseOnly statsParser . Text.encodeUtf8
+parse :: Text -> Either String Stats
+parse =
+  parseOnly statsParser . Text.encodeUtf8
 
 statsParser :: Parser Stats
 statsParser = do

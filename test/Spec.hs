@@ -1,7 +1,8 @@
 module Main where
 
 import Daffy.Info (Feature(..), Info(..))
-import Daffy.Stats
+
+import qualified Daffy.Stats as Stats
 
 import qualified Daffy.Eventlog
 import qualified Daffy.Info
@@ -64,7 +65,7 @@ statsSpec = do
     forM_ files $ \file ->
       it file $ do
         contents <- Text.readFile ("test/files/stats/" ++ file)
-        parseStats contents `shouldSatisfy` isRight
+        Stats.parse contents `shouldSatisfy` isRight
 
     let stats :: String -> String -> IO ()
         stats opts rtsopts =
@@ -75,7 +76,7 @@ statsSpec = do
             let bytes' :: Text
                 bytes' = decodeUtf8 (LByteString.toStrict bytes)
 
-            case parseStats bytes' of
+            case Stats.parse bytes' of
               Left err ->
                 expectationFailure
                   (unlines

@@ -42,9 +42,10 @@ library
     , ghc-events
     , streaming
     , streaming-bytestring
-    , typed-process
     , text
+    , typed-process
   exposed-modules:
+    Daffy.Command
     Daffy.Eventlog
     Daffy.Exception
     Daffy.Info
@@ -53,6 +54,7 @@ library
     DeriveGeneric
     DuplicateRecordFields
     LambdaCase
+    NamedFieldPuns
     OverloadedStrings
     PartialTypeSignatures
     ScopedTypeVariables
@@ -84,10 +86,14 @@ executable daffy
     , bytestring
     , daffy
     , daffy-prelude
+    , filepath
+    , temporary
+    , text
     , typed-process
     , websockets
   default-extensions:
     DeriveGeneric
+    LambdaCase
     NamedFieldPuns
     OverloadedStrings
     ScopedTypeVariables
