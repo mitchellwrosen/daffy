@@ -7,16 +7,19 @@ module Prelude
 
 import Control.Applicative as X
 import Control.Concurrent as X (forkIO, threadDelay)
+import Control.Concurrent.Async as X
 import Control.Concurrent.MVar as X
 import Control.Concurrent.STM as X
 import Control.Monad as X
 import Control.Monad.IO.Class as X (MonadIO)
 import Control.Monad.Managed as X
 import Control.Exception as X (Exception)
-import Control.Exception.Safe as X (catchAny, finally, throw, tryAny)
+import Control.Exception.Safe as X
+  (catch, catchAny, finally, throw, try, tryAny)
 import Data.ByteString as X (ByteString)
 import Data.Either as X
 import Data.Function as X ((&))
+import Data.IORef as X
 import Data.Text as X (Text, unpack)
 import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
 import Data.Typeable as X (Typeable)

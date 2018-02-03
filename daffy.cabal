@@ -40,6 +40,7 @@ library
     , bytestring
     , daffy-prelude
     , ghc-events
+    , hinotify
     , streaming
     , streaming-bytestring
     , text
@@ -50,6 +51,7 @@ library
     Daffy.Exception
     Daffy.Info
     Daffy.Stats
+    Daffy.Supervisor
   default-extensions:
     DeriveGeneric
     DuplicateRecordFields
@@ -66,7 +68,8 @@ library daffy-prelude
   default-extensions:
     PackageImports
   build-depends:
-      base >= 4.9 && < 4.11
+      async
+    , base >= 4.9 && < 4.11
     , bytestring
     , managed
     , safe-exceptions
@@ -86,7 +89,10 @@ executable daffy
     , bytestring
     , daffy
     , daffy-prelude
+    , directory
     , filepath
+    , ghc-events
+    , streaming
     , temporary
     , text
     , typed-process

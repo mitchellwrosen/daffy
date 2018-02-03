@@ -1,11 +1,17 @@
-import Daffy.Command
+import Daffy.Command (Command)
 import Daffy.Stats (Stats)
+import Daffy.Supervisor (Supervisor)
 
+import qualified Daffy.Command as Command
+import qualified Daffy.Eventlog as Eventlog
 import qualified Daffy.Stats as Stats
+import qualified Daffy.Supervisor as Supervisor
 
 import Data.Aeson (Value, (.=))
-import System.IO.Temp (withSystemTempDirectory)
-import System.FilePath ((</>))
+import System.Directory (removeFile)
+import System.FilePath (takeFileName)
+import System.IO (IOMode(WriteMode))
+import System.IO.Temp (emptySystemTempFile)
 import System.Process.Typed
 
 import qualified Data.Aeson as Aeson
@@ -13,7 +19,9 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text as Text (dropWhile)
 import qualified Data.Text.IO as Text
+import qualified GHC.RTS.Events as GHC
 import qualified Network.WebSockets as WebSockets
+import qualified Streaming.Prelude as Streaming
 
 main :: IO ()
 main =
@@ -24,7 +32,7 @@ app pconn = do
   conn :: WebSockets.Connection <-
     WebSockets.acceptRequest pconn
 
-  cmd :: Command <- do
+  command :: Command <- do
     blob :: LByteString <-
       WebSockets.receiveData conn
 
@@ -38,47 +46,63 @@ app pconn = do
       Just request ->
         pure request
 
-  runManaged $ do
-    tempdir :: FilePath <-
-      managed (withSystemTempDirectory "daffy")
+  runManaged (runCommand conn command)
 
-    let config :: ProcessConfig () Handle Handle
-        config =
-          shell (renderCommand cmd)
-            & setStdout createPipe
-            & setStderr createPipe
-            & setWorkingDir tempdir
+runCommand :: WebSockets.Connection -> Command -> Managed ()
+runCommand conn command = do
+  supervisor :: Supervisor <-
+    Supervisor.new
 
-    process :: Process () Handle Handle <-
-      managed (withProcess config)
+  when (Command.eventlog command) $ do
+    -- The location that (we assume) GHC will write the eventlog (if any).
+    eventlog :: FilePath <-
+      case words (Command.command command) of
+        [] -> do
+          io (hPutStrLn stderr "Empty command")
+          io exitFailure
+        prog : _ ->
+          pure (takeFileName prog ++ ".eventlog")
 
-    var1 :: MVar () <-
-      io newEmptyMVar
-    var2 :: MVar () <-
-      io newEmptyMVar
+    -- Truncate the old eventlog (if any)
+    io (withFile eventlog WriteMode (const (pure ())))
 
-    let worker
-          :: (WebSockets.Connection -> ByteString -> IO ()) -> Handle -> IO ()
-        worker send handle =
-          forever (ByteString.hGetLine handle >>= send conn)
+    Supervisor.spawn
+      supervisor
+      (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.parse eventlog)))
 
-    void . io . forkIO $ do
-      worker sendStdout (getStdout process)
-        `catchAny` \_ -> putMVar var1 ()
+  tempfile :: FilePath <-
+    io (emptySystemTempFile "daffy")
+  managed_ (flip finally (void (tryAny (removeFile tempfile))))
 
-    void . io . forkIO $ do
-      worker sendStderr (getStderr process)
-        `catchAny` \_ -> putMVar var2 ()
+  let config :: ProcessConfig () Handle Handle
+      config =
+        shell (Command.render tempfile command)
+          & setStdout createPipe
+          & setStderr createPipe
 
-    code :: ExitCode <-
-      waitExitCode process
+  process :: Process () Handle Handle <-
+    managed (withProcess config)
 
-    io (takeMVar var1)
-    io (takeMVar var2)
+  let worker
+        :: (WebSockets.Connection -> ByteString -> IO ()) -> Handle -> IO ()
+      worker send handle =
+        forever (ByteString.hGetLine handle >>= send conn)
 
-    sendExitCode conn code
+  Supervisor.spawn supervisor
+    (worker sendStdout (getStdout process) `catchAny` \_ -> pure ())
 
-    io (tryAny (Text.readFile (tempdir </> statsFile))) >>= \case
+  Supervisor.spawn supervisor
+    (worker sendStderr (getStderr process) `catchAny` \_ -> pure ())
+
+  code :: ExitCode <-
+    waitExitCode process
+
+  Supervisor.wait supervisor
+
+  sendExitCode conn code
+
+  when (Command.stats command) $
+    io (tryAny (Text.readFile tempfile)) >>= \case
       Left _ ->
         pure ()
       Right bytes ->
@@ -89,16 +113,6 @@ app pconn = do
             io exitFailure
           Right stats ->
             sendStats conn stats
-
-statsFile :: FilePath
-statsFile =
-  "stats"
-
-renderCommand :: Command -> String
-renderCommand Command{command, stats} =
-  if stats
-    then command ++ " +RTS -S" ++ statsFile
-    else command
 
 sendStdout :: MonadIO m => WebSockets.Connection -> ByteString -> m ()
 sendStdout conn line =
@@ -122,6 +136,17 @@ sendStderr conn line =
       , "payload" .= decodeUtf8 line
       ]
 
+sendEvent :: MonadIO m => WebSockets.Connection -> GHC.Event -> m ()
+sendEvent conn event =
+  io (WebSockets.sendTextData conn (Aeson.encode blob))
+ where
+  blob :: Value
+  blob =
+    Aeson.object
+      [ "type" .= ("event" :: Text)
+      , "payload" .= show event
+      ]
+
 sendExitCode :: MonadIO m => WebSockets.Connection -> ExitCode -> m ()
 sendExitCode conn code =
   io (WebSockets.sendTextData conn (Aeson.encode blob))
@@ -140,4 +165,11 @@ sendExitCode conn code =
 
 sendStats :: MonadIO m => WebSockets.Connection -> Stats -> m ()
 sendStats conn stats =
-  io (WebSockets.sendTextData conn (Aeson.encode stats))
+  io (WebSockets.sendTextData conn (Aeson.encode blob))
+ where
+  blob :: Value
+  blob =
+    Aeson.object
+      [ "type" .= ("stats" :: Text)
+      , "payload" .= stats
+      ]
