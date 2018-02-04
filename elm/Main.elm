@@ -2,78 +2,235 @@ module Main exposing (..)
 
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Html.Events
 import Json.Decode exposing (..)
+import Json.Encode
+import Step exposing (Step)
+import WebSocket
 
 
-main : Html ()
+main : Program Never Model Msg
 main =
-    view
-        { garbageCollections =
-            -- each GC creates an entry
-            [ { bytesAllocated = 0
-              , bytesCopied = 0
-              , liveBytes = 0
-              , time = { user = 0.0, elapsed = 0.0 }
-              , totalTime = { user = 0.0, elapsed = 0.0 }
-              , pageFaults = 0
-              , totalPageFaults = 0
-              , generation = 0 -- might want to filter by generation
-              }
-            , { bytesAllocated = 0
-              , bytesCopied = 0
-              , liveBytes = 0
-              , time = { user = 0.0, elapsed = 0.0 }
-              , totalTime = { user = 0.0, elapsed = 0.0 }
-              , pageFaults = 0
-              , totalPageFaults = 0
-              , generation = 1
-              }
-            ]
-        , generationSummaries =
-            [ { parallel = 0
-              , averagePauseTime = 0.0
-              , maxPauseTime = 0.0
-              }
-            ]
-        , parallelGarbageCollection =
-            Just
-                { parallel = 0.0
-                , serial = 0.0
-                , perfect = 0.0
-                }
-        , tasks =
-            Just
-                { tasks = 0
-                , bound = 0
-                , peakWorkers = 0
-                , totalWorkers = 0
-                }
-        , sparks =
-            Just
-                { sparks = 0
-                , converted = 0
-                , overflowed = 0
-                , dud = 0
-                , garbageCollected = 0
-                , fizzled = 0
-                }
-        , runtimeInitTime = { user = 0.0, elapsed = 0.0 }
-        , mutatorTime = { user = 0.0, elapsed = 0.0 }
-        , garbageCollectionTime = { user = 0.0, elapsed = 0.0 }
-        , runtimeShutdownTime = { user = 0.0, elapsed = 0.0 }
-        , totalTime = { user = 0.0, elapsed = 0.0 }
-        , percentGarbageCollectionTime = Just { user = 0.0, elapsed = 0.0 }
+    Html.program
+        { init = init ! []
+        , update = Step.asUpdateFunction update
+        , view = view
+        , subscriptions = subscriptions
         }
 
 
-view : Stats -> Html ()
-view stats =
-    div [ class "p-8" ]
-        [ div []
-            [ h1 [] [ text "Garbage Collections" ]
-            , viewTable gcTableConfig stats.garbageCollections
-            ]
-        ]
+type Model
+    = Initial { command : String }
+    | RunningProgram RunningProgram
+    | ExploringRun RunExploration ProgramRun
+
+
+type alias ProgramRun =
+    { stdout : List String
+    , stderr : List String
+    , exitCode : Int
+    , stats : Stats
+    }
+
+
+type alias RunExploration =
+    { nextFilter : Maybe (Result String GCFilter)
+    , gcFilters : List GCFilter
+    }
+
+
+type Msg
+    = TypeCommand String
+    | RunCommand
+    | ProgramRunMsg ProgramRunMsg
+
+
+type RunExplorationMsg
+    = TypeFilter String
+    | DeleteFilter GCFilter
+    | ConfirmFilter
+
+
+type GCFilter
+    = Generation Int
+
+
+type RunningProgram
+    = StreamingOutput { stderr : List String, stdout : List String }
+    | WaitingForStats { stderr : List String, stdout : List String } { exitCode : Int }
+
+
+type ProgramRunMsg
+    = StdOutLine String
+    | StdErrLine String
+    | ExitedWith Int
+    | RunStats Stats
+    | RunMsgParseErr String
+
+
+init : Model
+init =
+    Initial { command = "" }
+
+
+update : Msg -> Model -> Step Model Msg Never
+update msg model =
+    case ( model, msg ) of
+        ( Initial _, TypeCommand s ) ->
+            Step.to (Initial { command = s })
+
+        ( Initial { command }, RunCommand ) ->
+            Step.to (RunningProgram (StreamingOutput { stderr = [], stdout = [] }))
+                |> Step.withCmd
+                    ([ ( "command", Json.Encode.string command )
+                     , ( "stats", Json.Encode.bool True )
+                     , ( "eventLog", Json.Encode.bool False )
+                     ]
+                        |> Json.Encode.object
+                        |> Json.Encode.encode 0
+                        |> WebSocket.send "/"
+                    )
+
+        ( RunningProgram runningProgram, ProgramRunMsg programRunMsg ) ->
+            stepRunningProgram programRunMsg runningProgram
+                |> Step.map RunningProgram
+                |> Step.mapMsg ProgramRunMsg
+                |> Step.onExit (Step.to << ExploringRun { nextFilter = Nothing, gcFilters = [] })
+
+        _ ->
+            Step.noop
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    case model of
+        Initial _ ->
+            Sub.none
+
+        RunningProgram runningProgram ->
+            Sub.map ProgramRunMsg <|
+                WebSocket.listen "/"
+                    (\raw ->
+                        case Json.Decode.decodeString decodeRunMsg raw of
+                            Ok msg ->
+                                msg
+
+                            Err string ->
+                                RunMsgParseErr string
+                    )
+
+        ExploringRun runExploration programRun ->
+            Sub.none
+
+
+decodeRunMsg : Decoder ProgramRunMsg
+decodeRunMsg =
+    let
+        payload =
+            field "payload"
+    in
+        field "type" string
+            |> Json.Decode.andThen
+                (\type_ ->
+                    case type_ of
+                        "stdout" ->
+                            payload string
+                                |> Json.Decode.map StdOutLine
+
+                        "stderr" ->
+                            payload string
+                                |> Json.Decode.map StdErrLine
+
+                        "event" ->
+                            payload (fail "gotta implement event")
+
+                        "exitcode" ->
+                            payload int
+                                |> Json.Decode.map ExitedWith
+
+                        "stats" ->
+                            payload decodeStats
+                                |> Json.Decode.map RunStats
+
+                        _ ->
+                            Json.Decode.fail "couldn't parse message from server"
+                )
+
+
+stepRunningProgram : ProgramRunMsg -> RunningProgram -> Step RunningProgram msg ProgramRun
+stepRunningProgram programRunMsg runningProgram =
+    case ( runningProgram, programRunMsg ) of
+        ( StreamingOutput data, StdOutLine line ) ->
+            Step.to (StreamingOutput { data | stdout = line :: data.stdout })
+
+        ( StreamingOutput data, StdErrLine line ) ->
+            Step.to (StreamingOutput { data | stderr = line :: data.stderr })
+
+        ( StreamingOutput data, ExitedWith code ) ->
+            Step.to (WaitingForStats data { exitCode = code })
+
+        ( WaitingForStats data code, RunStats stats ) ->
+            Step.exit { stdout = data.stdout, stderr = data.stderr, exitCode = code.exitCode, stats = stats }
+
+        ( _, RunMsgParseErr err ) ->
+            Debug.log "parse error" err
+                |> \_ -> Step.noop
+
+        _ ->
+            Step.noop
+
+
+view : Model -> Html Msg
+view model =
+    let
+        viewProgramOutput { stdout, stderr } =
+            div []
+                [ div []
+                    [ h1 []
+                        [ text "Standard Out"
+                        , p [] [ text <| String.join "\n" (List.reverse stdout) ]
+                        ]
+                    ]
+                , div []
+                    [ h1 []
+                        [ text "Standard Error"
+                        , p [] [ text <| String.join "\n" (List.reverse stderr) ]
+                        ]
+                    ]
+                ]
+    in
+        div [ class "p-8" ] <|
+            case model of
+                Initial { command } ->
+                    [ div []
+                        [ span [ class "text-lg mr-3" ] [ text "Command to Run" ]
+                        , input
+                            [ class "border"
+                            , type_ "text"
+                            , Html.Attributes.value command
+                            , Html.Events.onInput TypeCommand
+                            ]
+                            []
+                        ]
+                    , div [] [ button [ class "border shadow rounded px-2 py-1", type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
+                    ]
+
+                RunningProgram runningProgram ->
+                    [ case runningProgram of
+                        StreamingOutput programOutput ->
+                            viewProgramOutput programOutput
+
+                        WaitingForStats programOutput _ ->
+                            viewProgramOutput programOutput
+                    ]
+
+                ExploringRun runExploration programRun ->
+                    [ viewProgramOutput programRun
+                    , div []
+                        [ h1 [] [ text "Garbage Collections" ]
+                        , viewTable gcTableConfig programRun.stats.garbageCollections
+                        ]
+                    ]
 
 
 gcTableConfig : List (Column GCStats)
@@ -120,31 +277,6 @@ viewTable columns elements =
                 )
             |> tbody []
         ]
-
-
-type RunExploration
-    = RunExploration (Maybe (Result String GCFilter)) (List GCFilter)
-
-
-type RunExplorationMsg
-    = TypeFilter String
-    | DeleteFilter GCFilter
-    | ConfirmFilter
-
-
-type GCFilter
-    = Generation Int
-
-
-type ProgramRun
-    = StreamingOutput { stderr : List String, stdout : List String }
-    | WaitingForStats { stderr : List String, stdout : List String } { exitCode : Int }
-
-
-type ProgramRunMsg
-    = StdOutLine String
-    | StdErrLine String
-    | ExitedWith Int (Maybe Stats)
 
 
 
@@ -296,3 +428,63 @@ decodeTime =
     Json.Decode.map2 Time
         (Json.Decode.field "user" Json.Decode.float)
         (Json.Decode.field "elapsed" Json.Decode.float)
+
+
+testStats : Stats
+testStats =
+    { garbageCollections =
+        -- each GC creates an entry
+        [ { bytesAllocated = 0
+          , bytesCopied = 0
+          , liveBytes = 0
+          , time = { user = 0.0, elapsed = 0.0 }
+          , totalTime = { user = 0.0, elapsed = 0.0 }
+          , pageFaults = 0
+          , totalPageFaults = 0
+          , generation = 0 -- might want to filter by generation
+          }
+        , { bytesAllocated = 0
+          , bytesCopied = 0
+          , liveBytes = 0
+          , time = { user = 0.0, elapsed = 0.0 }
+          , totalTime = { user = 0.0, elapsed = 0.0 }
+          , pageFaults = 0
+          , totalPageFaults = 0
+          , generation = 1
+          }
+        ]
+    , generationSummaries =
+        [ { parallel = 0
+          , averagePauseTime = 0.0
+          , maxPauseTime = 0.0
+          }
+        ]
+    , parallelGarbageCollection =
+        Just
+            { parallel = 0.0
+            , serial = 0.0
+            , perfect = 0.0
+            }
+    , tasks =
+        Just
+            { tasks = 0
+            , bound = 0
+            , peakWorkers = 0
+            , totalWorkers = 0
+            }
+    , sparks =
+        Just
+            { sparks = 0
+            , converted = 0
+            , overflowed = 0
+            , dud = 0
+            , garbageCollected = 0
+            , fizzled = 0
+            }
+    , runtimeInitTime = { user = 0.0, elapsed = 0.0 }
+    , mutatorTime = { user = 0.0, elapsed = 0.0 }
+    , garbageCollectionTime = { user = 0.0, elapsed = 0.0 }
+    , runtimeShutdownTime = { user = 0.0, elapsed = 0.0 }
+    , totalTime = { user = 0.0, elapsed = 0.0 }
+    , percentGarbageCollectionTime = Just { user = 0.0, elapsed = 0.0 }
+    }
