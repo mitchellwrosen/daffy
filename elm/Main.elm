@@ -22,7 +22,8 @@ main =
 type Model
     = Initial { command : String }
     | RunningProgram RunningProgram
-    | ExploringRun RunExploration ProgramRun
+    | ProgramFailed ProgramOutput { exitCode : Int }
+    | ExploringRun ProgramRun
 
 
 type alias ProgramRun =
@@ -30,12 +31,6 @@ type alias ProgramRun =
     , stderr : List String
     , exitCode : Int
     , stats : Stats
-    }
-
-
-type alias RunExploration =
-    { nextFilter : Maybe (Result String GCFilter)
-    , gcFilters : List GCFilter
     }
 
 
@@ -47,17 +42,17 @@ type Msg
 
 type RunExplorationMsg
     = TypeFilter String
-    | DeleteFilter GCFilter
+    | DeleteFilter
     | ConfirmFilter
 
 
-type GCFilter
-    = Generation Int
-
-
 type RunningProgram
-    = StreamingOutput { stderr : List String, stdout : List String }
-    | WaitingForStats { stderr : List String, stdout : List String } { exitCode : Int }
+    = StreamingOutput ProgramOutput
+    | WaitingForStats ProgramOutput
+
+
+type alias ProgramOutput =
+    { stderr : List String, stdout : List String }
 
 
 type ProgramRunMsg
@@ -84,18 +79,27 @@ update msg model =
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string command )
                      , ( "stats", Json.Encode.bool True )
-                     , ( "eventLog", Json.Encode.bool False )
+                     , ( "eventlog", Json.Encode.bool False )
                      ]
                         |> Json.Encode.object
                         |> Json.Encode.encode 0
-                        |> WebSocket.send "/"
+                        |> WebSocket.send "ws://localhost:8080"
                     )
 
         ( RunningProgram runningProgram, ProgramRunMsg programRunMsg ) ->
             stepRunningProgram programRunMsg runningProgram
                 |> Step.map RunningProgram
                 |> Step.mapMsg ProgramRunMsg
-                |> Step.onExit (Step.to << ExploringRun { nextFilter = Nothing, gcFilters = [] })
+                |> Step.onExit
+                    (\result ->
+                        Step.to <|
+                            case result of
+                                Err ( output, code ) ->
+                                    ProgramFailed output code
+
+                                Ok run ->
+                                    ExploringRun run
+                    )
 
         _ ->
             Step.noop
@@ -107,9 +111,12 @@ subscriptions model =
         Initial _ ->
             Sub.none
 
+        ProgramFailed _ _ ->
+            Sub.none
+
         RunningProgram runningProgram ->
             Sub.map ProgramRunMsg <|
-                WebSocket.listen "/"
+                WebSocket.listen "ws://localhost:8080"
                     (\raw ->
                         case Json.Decode.decodeString decodeRunMsg raw of
                             Ok msg ->
@@ -119,7 +126,7 @@ subscriptions model =
                                 RunMsgParseErr string
                     )
 
-        ExploringRun runExploration programRun ->
+        ExploringRun programRun ->
             Sub.none
 
 
@@ -157,7 +164,7 @@ decodeRunMsg =
                 )
 
 
-stepRunningProgram : ProgramRunMsg -> RunningProgram -> Step RunningProgram msg ProgramRun
+stepRunningProgram : ProgramRunMsg -> RunningProgram -> Step RunningProgram msg (Result ( ProgramOutput, { exitCode : Int } ) ProgramRun)
 stepRunningProgram programRunMsg runningProgram =
     case ( runningProgram, programRunMsg ) of
         ( StreamingOutput data, StdOutLine line ) ->
@@ -167,10 +174,15 @@ stepRunningProgram programRunMsg runningProgram =
             Step.to (StreamingOutput { data | stderr = line :: data.stderr })
 
         ( StreamingOutput data, ExitedWith code ) ->
-            Step.to (WaitingForStats data { exitCode = code })
+            case code of
+                0 ->
+                    Step.to (WaitingForStats data)
 
-        ( WaitingForStats data code, RunStats stats ) ->
-            Step.exit { stdout = data.stdout, stderr = data.stderr, exitCode = code.exitCode, stats = stats }
+                nonZero ->
+                    Step.exit (Err ( data, { exitCode = code } ))
+
+        ( WaitingForStats data, RunStats stats ) ->
+            Step.exit (Ok { stdout = data.stdout, stderr = data.stderr, exitCode = 0, stats = stats })
 
         ( _, RunMsgParseErr err ) ->
             Debug.log "parse error" err
@@ -186,16 +198,12 @@ view model =
         viewProgramOutput { stdout, stderr } =
             div []
                 [ div []
-                    [ h1 []
-                        [ text "Standard Out"
-                        , p [] [ text <| String.join "\n" (List.reverse stdout) ]
-                        ]
+                    [ h1 [] [ text "Standard Out" ]
+                    , p [] [ text <| String.join "\n" (List.reverse stdout) ]
                     ]
                 , div []
-                    [ h1 []
-                        [ text "Standard Error"
-                        , p [] [ text <| String.join "\n" (List.reverse stderr) ]
-                        ]
+                    [ h1 [] [ text "Standard Error" ]
+                    , p [] [ text <| String.join "\n" (List.reverse stderr) ]
                     ]
                 ]
     in
@@ -220,11 +228,16 @@ view model =
                         StreamingOutput programOutput ->
                             viewProgramOutput programOutput
 
-                        WaitingForStats programOutput _ ->
+                        WaitingForStats programOutput ->
                             viewProgramOutput programOutput
                     ]
 
-                ExploringRun runExploration programRun ->
+                ProgramFailed programOutput { exitCode } ->
+                    [ div [] [ text <| "progam failed with exit code " ++ toString exitCode ]
+                    , viewProgramOutput programOutput
+                    ]
+
+                ExploringRun programRun ->
                     [ viewProgramOutput programRun
                     , div []
                         [ h1 [] [ text "Garbage Collections" ]
