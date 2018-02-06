@@ -64,8 +64,14 @@ runCommand conn command = do
   supervisor :: Supervisor <-
     Supervisor.new
 
-  eventlog :: FilePath <-
-    getEventlogPath (Command.command command)
+  -- "/foo/bar/baz --oink" -> "baz"
+  let progname :: String
+      progname =
+        takeFileName (head (words (Command.command command)))
+
+  let eventlog :: FilePath
+      eventlog =
+        progname ++ ".eventlog"
 
   -- If Linux, incrementally parse the eventlog as it's written to by GHC. Turns
   -- out this doesn't exactly stream the eventlog in real time, as it's only
@@ -139,18 +145,24 @@ runCommand conn command = do
           Right stats ->
             sendStats conn stats
 
-  sendExitCode conn code
+  -- Generate time and alloc flamegraphs
+  when (Command.prof command) $ do
+    let prof :: FilePath
+        prof =
+          progname ++ ".prof"
 
--- The location that GHC will write the eventlog (if any). Probably at some
--- point this will become customizable by a GHC option.
-getEventlogPath :: MonadIO m => String -> m FilePath
-getEventlogPath command =
-  case words command of
-    [] -> io $ do
-      hPutStrLn stderr "Empty command"
-      exitFailure
-    prog : _ ->
-      pure (takeFileName prog ++ ".eventlog")
+    runProcess_
+      (shell
+        ("ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ progname
+          ++ "-ticks.svg")
+        & setStdout closed)
+    runProcess_
+      (shell
+        ("ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ progname
+          ++ "-bytes.svg")
+        & setStdout closed)
+
+  sendExitCode conn code
 
 sendStdout :: MonadIO m => WebSockets.Connection -> ByteString -> m ()
 sendStdout conn line =

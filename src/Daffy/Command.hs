@@ -7,8 +7,9 @@ import Data.Aeson (FromJSON)
 
 data Command = Command
   { command :: String -- ^ Raw shell command. Invariant: non-empty.
-  , stats :: Bool
-  , eventlog :: Bool
+  , stats :: Bool -- ^ Generate runtime stats?
+  , eventlog :: Bool -- ^ Write an eventlog?
+  , prof :: Bool -- ^ Generate a time and allocation profile?
   } deriving (Generic)
 
 instance FromJSON Command
@@ -24,5 +25,8 @@ render statsfile cmd =
         else ""
     , if eventlog cmd
         then " -l"
+        else ""
+    , if prof cmd
+        then " -pa"
         else ""
     ]
