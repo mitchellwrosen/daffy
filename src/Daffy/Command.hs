@@ -3,19 +3,20 @@ module Daffy.Command
   , render
   ) where
 
-import Data.Aeson (FromJSON)
+import Data.Aeson (FromJSON, ToJSON)
 
 data Command = Command
-  { command :: String -- ^ Raw shell command. Invariant: non-empty.
+  { command :: [Char] -- ^ Raw shell command. Invariant: non-empty.
   , stats :: Bool -- ^ Generate runtime stats?
   , eventlog :: Bool -- ^ Write an eventlog?
   , prof :: Bool -- ^ Generate a time and allocation profile?
   } deriving (Generic)
 
 instance FromJSON Command
+instance ToJSON Command
 
 -- | Render a 'Command' as a full shell command including all RTS opts.
-render :: FilePath -> Command -> String
+render :: FilePath -> Command -> [Char]
 render statsfile cmd =
   concat
     [ command cmd

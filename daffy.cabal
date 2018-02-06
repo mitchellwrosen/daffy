@@ -58,6 +58,7 @@ library
   default-extensions:
     DeriveGeneric
     DuplicateRecordFields
+    InstanceSigs
     LambdaCase
     NamedFieldPuns
     OverloadedStrings
@@ -92,12 +93,11 @@ executable daffy
     , bytestring
     , daffy
     , daffy-prelude
-    , directory
     , filepath
     , ghc-events
     , http-types
+    , reflection
     , streaming
-    , temporary
     , text
     , typed-process
     , websockets
@@ -106,6 +106,7 @@ executable daffy
     , warp
   default-extensions:
     DeriveGeneric
+    FlexibleContexts
     LambdaCase
     NamedFieldPuns
     OverloadedStrings

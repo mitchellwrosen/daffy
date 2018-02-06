@@ -100,8 +100,8 @@ parseEvents decoder bytes =
       parseEvents decoder' bytes
     GHC.Done _ ->
       error "Done"
-    GHC.Error _ _ ->
-      lift (throw EventlogParseException)
+    GHC.Error _ err ->
+      lift (throw (EventlogParseException err))
 
 fromHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
 fromHandle waitEvent handle =

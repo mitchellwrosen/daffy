@@ -2,10 +2,8 @@ module Main where
 
 import Daffy.Info (Feature(..), Info(..))
 
-import qualified Daffy.Stats as Stats
-
-import qualified Daffy.Eventlog
 import qualified Daffy.Info
+import qualified Daffy.Stats as Stats
 
 import System.Directory
 import System.IO.Temp
@@ -52,7 +50,7 @@ infoSpec = do
  where
   -- Provide a spec with a function that, given GHC options, compiles and runs a
   -- do-nothing program in a temporary directory and returns its parsed info.
-  setup :: ((String -> IO Info) -> IO ()) -> IO ()
+  setup :: (([Char] -> IO Info) -> IO ()) -> IO ()
   setup run =
     run (\opts -> ghc opts Daffy.Info.run)
 
@@ -67,7 +65,7 @@ statsSpec = do
         contents <- Text.readFile ("test/files/stats/" ++ file)
         Stats.parse contents `shouldSatisfy` isRight
 
-    let stats :: String -> String -> IO ()
+    let stats :: [Char] -> [Char] -> IO ()
         stats opts rtsopts =
           ghc opts $ \path -> do
             bytes :: LByteString <-
@@ -92,7 +90,7 @@ statsSpec = do
     it "threaded -N1" (stats "-threaded" "-N1")
     it "threaded -N2" (stats "-threaded" "-N2")
 
-ghc :: String -> (FilePath -> IO a) -> IO a
+ghc :: [Char] -> (FilePath -> IO a) -> IO a
 ghc opts run =
   withTempDirectory "." "daffy" $ \dir -> do
     writeFile (dir ++ "/foo.hs")

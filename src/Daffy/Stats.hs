@@ -92,7 +92,7 @@ data Time = Time
 
 instance ToJSON Time
 
-parse :: Text -> Either String Stats
+parse :: Text -> Either [Char] Stats
 parse =
   parseOnly statsParser . Text.encodeUtf8
 

@@ -37,7 +37,7 @@ instance ToJSON Feature where
 
 parse :: LByteString -> Maybe Info
 parse bytes = do
-  info :: [(String, String)] <-
+  info :: [([Char], [Char])] <-
     readMaybe (LChar8.unpack bytes)
   lookup "RTS way" info >>= \case
     "rts_v" -> Just (Info False Vanilla)
@@ -53,7 +53,7 @@ parse bytes = do
 -- | Parse an 'Info' from the output of './prog +RTS --info'. If the program
 -- exits with non-zero exit code, or parsing fails, throws
 -- 'InfoParseException'.
-run :: String -> IO Info
+run :: [Char] -> IO Info
 run cmd = do
   (code, out, _) :: (ExitCode, LByteString, LByteString) <-
     readProcess (shell (cmd ++ " +RTS --info"))
@@ -65,6 +65,6 @@ run cmd = do
 
   case minfo of
     Nothing ->
-      throw InfoParseException
+      throw (InfoParseException out)
     Just info ->
       pure info
