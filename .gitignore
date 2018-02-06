@@ -1,7 +1,7 @@
 .ghc.environment.*
 .ghci
 .stack-work/
-static/daffy.js
+dist/
 dist-newstyle/
 elm-stuff/
-dist/daffy.js
+static/daffy.js

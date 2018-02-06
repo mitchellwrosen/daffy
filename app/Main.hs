@@ -12,6 +12,9 @@ import qualified Daffy.Stats as Stats
 import qualified Daffy.Supervisor as Supervisor
 
 import Data.Aeson (Value, (.=))
+import Network.HTTP.Types.Header (hContentType)
+import Network.HTTP.Types.Status (status200, status404)
+import Network.Wai.Handler.WebSockets (websocketsOr)
 import System.Directory (removeFile)
 import System.FilePath (takeFileName)
 import System.IO (IOMode(WriteMode))
@@ -24,15 +27,48 @@ import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text as Text (dropWhile)
 import qualified Data.Text.IO as Text
 import qualified GHC.RTS.Events as GHC
+import qualified Network.Wai as Wai
+import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WebSockets
 import qualified Streaming.Prelude as Streaming
 
 main :: IO ()
 main =
-  WebSockets.runServer "localhost" 8080 app
+  Warp.run 8080 app
 
-app :: WebSockets.PendingConnection -> IO ()
-app pconn = do
+app :: Wai.Application
+app =
+  websocketsOr WebSockets.defaultConnectionOptions wsApp httpApp
+
+httpApp :: Wai.Application
+httpApp request respond = do
+  case Wai.requestMethod request of
+    "GET" ->
+      case Wai.rawPathInfo request of
+        "/" ->
+          respond (htmlFile "static/index.html")
+        "/daffy.js" ->
+          respond (jsFile "static/daffy.js")
+        _ ->
+          respond notFound
+    _ ->
+      respond notFound
+
+ where
+  htmlFile :: FilePath -> Wai.Response
+  htmlFile path =
+    Wai.responseFile status200 [(hContentType, "text/html")] path Nothing
+
+  jsFile :: FilePath -> Wai.Response
+  jsFile path =
+    Wai.responseFile status200 [(hContentType, "application/json")] path Nothing
+
+  notFound :: Wai.Response
+  notFound =
+    Wai.responseLBS status404 [] ""
+
+wsApp :: WebSockets.PendingConnection -> IO ()
+wsApp pconn = do
   conn :: WebSockets.Connection <-
     WebSockets.acceptRequest pconn
 
@@ -145,21 +181,25 @@ runCommand conn command = do
           Right stats ->
             sendStats conn stats
 
-  -- Generate time and alloc flamegraphs
+  -- Send time and alloc flamegraphs
   when (Command.prof command) $ do
     let prof :: FilePath
         prof =
           progname ++ ".prof"
 
+    let tickssvg :: FilePath
+        tickssvg =
+          progname ++ "-ticks.svg"
+
+    let bytessvg :: FilePath
+        bytessvg =
+          progname ++ "-bytes.svg"
+
     runProcess_
-      (shell
-        ("ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ progname
-          ++ "-ticks.svg")
+      (shell ("ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ tickssvg)
         & setStdout closed)
     runProcess_
-      (shell
-        ("ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ progname
-          ++ "-bytes.svg")
+      (shell ("ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ bytessvg)
         & setStdout closed)
 
   sendExitCode conn code

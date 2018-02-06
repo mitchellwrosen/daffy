@@ -95,11 +95,15 @@ executable daffy
     , directory
     , filepath
     , ghc-events
+    , http-types
     , streaming
     , temporary
     , text
     , typed-process
     , websockets
+    , wai
+    , wai-websockets
+    , warp
   default-extensions:
     DeriveGeneric
     LambdaCase
