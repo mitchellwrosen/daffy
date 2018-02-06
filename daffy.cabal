@@ -40,18 +40,21 @@ library
     , bytestring
     , daffy-prelude
     , ghc-events
-    , hinotify
     , streaming
     , streaming-bytestring
     , text
     , typed-process
+  if os(linux)
+    build-depends: hinotify
   exposed-modules:
     Daffy.Command
-    Daffy.Eventlog
     Daffy.Exception
     Daffy.Info
     Daffy.Stats
     Daffy.Supervisor
+  if os(linux)
+    exposed-modules:
+      Daffy.Eventlog
   default-extensions:
     DeriveGeneric
     DuplicateRecordFields
@@ -103,7 +106,10 @@ executable daffy
     NamedFieldPuns
     OverloadedStrings
     ScopedTypeVariables
+    ViewPatterns
   default-language: Haskell2010
+  if os(linux)
+    cpp-options: -DINOTIFY
 
 test-suite spec
   type: exitcode-stdio-1.0
