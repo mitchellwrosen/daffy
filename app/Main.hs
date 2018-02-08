@@ -24,6 +24,7 @@ import System.Process.Typed
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text as Text (dropWhile)
 import qualified Data.Text.IO as Text
 import qualified GHC.RTS.Events as GHC
@@ -52,7 +53,7 @@ main' = do
             when (Warp.defaultShouldDisplayException ex)
               (hPutStrLn stderr (displayException ex)))
 
--- Logging middleware.
+-- Log requests at v1 or higher
 log :: Given V => Wai.Application -> Wai.Application
 log app request respond =
   app request respond'
@@ -106,6 +107,8 @@ httpApp request respond = do
 -- etc, and then tear down the connection.
 wsApp :: Given V => WebSockets.PendingConnection -> IO ()
 wsApp pconn = do
+  v1 (show (WebSockets.pendingRequest pconn))
+
   conn :: WebSockets.Connection <-
     WebSockets.acceptRequest pconn
 
@@ -117,19 +120,26 @@ wsApp pconn = do
 
   runManaged (runCommand conn command)
 
+  v3 "SEND close frame"
+
   WebSockets.sendClose conn ByteString.empty
+
+  v2 "Waiting for close frame"
 
   fix $ \loop ->
     try (WebSockets.receiveDataMessage conn) >>= \case
       Left (WebSockets.CloseRequest _ _) ->
-        pure ()
+        v3 "RECV close frame"
       Left ex ->
         throw ex
-      Right _ ->
+      Right _ -> do
+        v3 "RECV some bytes, but waiting for close frame"
         loop
 
 recvCommand :: Given V => WebSockets.Connection -> IO Command
 recvCommand conn = do
+  v2 "Waiting for command"
+
   blob :: LByteString <-
     WebSockets.receiveData conn
 
@@ -164,7 +174,7 @@ runCommand conn command = do
   -- have to do, for now.
 #ifdef INOTIFY
   when (Command.eventlog command) $ do
-    v1 ("Writing eventlog to " ++ eventlog)
+    v2 ("Writing eventlog to " ++ eventlog)
 
     -- Truncate the old eventlog (if any)
     io (withFile eventlog WriteMode (const (pure ())))
@@ -179,7 +189,7 @@ runCommand conn command = do
         progname ++ ".stats"
 
   when (Command.stats command)
-    (v1 ("Writing stats to " ++ statsfile))
+    (v2 ("Writing stats to " ++ statsfile))
 
   -- Spawn the process.
   v1 ("Running: " ++ Command.render statsfile command)
@@ -212,7 +222,7 @@ runCommand conn command = do
   when (Command.eventlog command) $ do
     io (tryAny (GHC.readEventLogFromFile eventlog)) >>= \case
       Left _ ->
-        pure ()
+        v2 ("{\"eventlog\": true}, but " ++ eventlog ++ " not found")
       Right (Left err) ->
         throw (EventlogParseException err)
       Right (Right (GHC.dat -> GHC.Data events)) ->
@@ -223,7 +233,7 @@ runCommand conn command = do
   when (Command.stats command) $
     io (tryAny (Text.readFile statsfile)) >>= \case
       Left _ ->
-        pure ()
+        v2 ("{\"stats\": true}, but " ++ statsfile ++ " not found")
       Right bytes ->
         -- Drop a line, because when directing -S output to a file, the command
         -- invocation is written at the top.
@@ -243,28 +253,49 @@ runCommand conn command = do
         tickssvg =
           progname ++ "-ticks.svg"
 
-    v1 ("Writing ticks flamegraph to " ++ tickssvg)
-    runProcess_
-      (shell ("ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ tickssvg)
-        & setStdout closed)
+    let mktickssvg :: [Char]
+        mktickssvg =
+          "ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ tickssvg
+
+    v2 ("Running: " ++ mktickssvg)
+
+    runProcess_ (shell mktickssvg & setStdout closed)
+
+    sendFlamegraph conn "ticks-flamegraph" tickssvg
 
     let bytessvg :: FilePath
         bytessvg =
           progname ++ "-bytes.svg"
 
-    v1 ("Writing bytes flamegraph to " ++ bytessvg)
-    runProcess_
-      (shell ("ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ bytessvg)
-        & setStdout closed)
+    let mkbytessvg :: [Char]
+        mkbytessvg =
+          "ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ bytessvg
+
+    v2 ("Running: " ++ mkbytessvg)
+
+    runProcess_ (shell mkbytessvg & setStdout closed)
+
+    sendFlamegraph conn "bytes-flamegraph" tickssvg
 
   sendExitCode conn code
 
 --------------------------------------------------------------------------------
 -- Send blobby blobs
 
-sendStdout :: MonadIO m => WebSockets.Connection -> ByteString -> m ()
+sendText :: (Given V, MonadIO m) => WebSockets.Connection -> LByteString -> m ()
+sendText conn msg = do
+  v3 ("SEND " ++ unpack (decodeUtf8 (LByteString.toStrict msg)))
+  io (WebSockets.sendTextData conn msg)
+
+sendBinary
+  :: (Given V, MonadIO m) => WebSockets.Connection -> LByteString -> m ()
+sendBinary conn bytes = do
+  v3 ("SEND binary data (" ++ show (LByteString.length bytes) ++ " bytes)")
+  io (WebSockets.sendBinaryData conn bytes)
+
+sendStdout :: Given V => WebSockets.Connection -> ByteString -> IO ()
 sendStdout conn line =
-  io (WebSockets.sendTextData conn (Aeson.encode blob))
+  sendText conn (Aeson.encode blob)
  where
   blob :: Value
   blob =
@@ -273,9 +304,9 @@ sendStdout conn line =
       , "payload" .= decodeUtf8 line
       ]
 
-sendStderr :: WebSockets.Connection -> ByteString -> IO ()
+sendStderr :: Given V => WebSockets.Connection -> ByteString -> IO ()
 sendStderr conn line =
-  WebSockets.sendTextData conn (Aeson.encode blob)
+  sendText conn (Aeson.encode blob)
  where
   blob :: Value
   blob =
@@ -284,9 +315,9 @@ sendStderr conn line =
       , "payload" .= decodeUtf8 line
       ]
 
-sendEvent :: MonadIO m => WebSockets.Connection -> GHC.Event -> m ()
+sendEvent :: (Given V, MonadIO m) => WebSockets.Connection -> GHC.Event -> m ()
 sendEvent conn event =
-  io (WebSockets.sendTextData conn (Aeson.encode blob))
+  sendText conn (Aeson.encode blob)
  where
   blob :: Value
   blob =
@@ -295,9 +326,37 @@ sendEvent conn event =
       , "payload" .= show event
       ]
 
-sendExitCode :: MonadIO m => WebSockets.Connection -> ExitCode -> m ()
+sendStats :: (Given V, MonadIO m) => WebSockets.Connection -> Stats -> m ()
+sendStats conn stats =
+  sendText conn (Aeson.encode blob)
+ where
+  blob :: Value
+  blob =
+    Aeson.object
+      [ "type" .= ("stats" :: Text)
+      , "payload" .= stats
+      ]
+
+sendFlamegraph
+  :: (Given V, MonadIO m) => WebSockets.Connection -> Text -> FilePath -> m ()
+sendFlamegraph conn name path = do
+  bytes :: LByteString <-
+    io (LByteString.readFile path)
+
+  let blob :: Value
+      blob =
+        Aeson.object
+          [ "type" .= name
+          , "payload" .= LByteString.length bytes
+          ]
+
+  sendText conn (Aeson.encode blob)
+  sendBinary conn bytes
+
+sendExitCode
+  :: (Given V, MonadIO m) => WebSockets.Connection -> ExitCode -> m ()
 sendExitCode conn code =
-  io (WebSockets.sendTextData conn (Aeson.encode blob))
+  sendText conn (Aeson.encode blob)
  where
   blob :: Value
   blob =
@@ -311,31 +370,28 @@ sendExitCode conn code =
               n
       ]
 
-sendStats :: MonadIO m => WebSockets.Connection -> Stats -> m ()
-sendStats conn stats =
-  io (WebSockets.sendTextData conn (Aeson.encode blob))
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("stats" :: Text)
-      , "payload" .= stats
-      ]
-
 --------------------------------------------------------------------------------
 -- Verbosity
 
+-- V0: Messages to show no matter what
+-- V1: Log some noteworthy actions, such as clients connecting
+-- V2: Very verbosely log almost every little action the program is doing
+-- V3: Also log all communication with the client
 data V
   = V0
   | V1
+  | V2
+  | V3
   deriving (Eq, Ord)
 
-v0 :: MonadIO m => [Char] -> m ()
-v0 =
-  io . putStrLn
+v0, v1, v2, v3 :: (Given V, MonadIO m) => [Char] -> m ()
+v0 = vv V0
+v1 = vv V1
+v2 = vv V2
+v3 = vv V3
 
-v1 :: (Given V, MonadIO m) => [Char] -> m ()
-v1 =
-  if given >= V1
-    then io . putStrLn
+vv :: (Given V, MonadIO m) => V -> [Char] -> m ()
+vv v =
+  if given >= v
+    then putStrLn
     else io . mempty

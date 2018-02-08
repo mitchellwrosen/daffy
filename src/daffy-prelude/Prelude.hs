@@ -2,7 +2,9 @@ module Prelude
   ( module X
   , LByteString
   , SByteString
+  , hPutStrLn
   , io
+  , putStrLn
   ) where
 
 import Control.Applicative as X
@@ -25,13 +27,16 @@ import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
 import Data.Typeable as X (Typeable)
 import Debug.Trace as X
 import GHC.Generics as X (Generic)
-import "base" Prelude as X hiding (String, log)
-import System.IO as X (Handle, hPutStrLn, stderr, withFile)
+import "base" Prelude as X hiding (String, log, putStrLn)
+import System.IO as X (Handle, stderr, withFile)
 import System.Exit as X (ExitCode(..), exitFailure)
 import Text.Read as X (readMaybe)
 
+import System.IO.Unsafe (unsafePerformIO)
+
 import qualified Data.ByteString.Lazy
 import qualified Data.ByteString.Streaming
+import qualified System.IO
 
 type LByteString
   = Data.ByteString.Lazy.ByteString
@@ -39,5 +44,19 @@ type LByteString
 type SByteString
   = Data.ByteString.Streaming.ByteString
 
+hPutStrLn :: MonadIO m => Handle -> [Char] -> m ()
+hPutStrLn handle =
+  liftIO . withMVar iolock . const . System.IO.hPutStrLn handle
+
 io :: MonadIO m => IO a -> m a
-io = liftIO
+io =
+  liftIO
+
+putStrLn :: MonadIO m => [Char] -> m ()
+putStrLn =
+  liftIO . withMVar iolock . const . System.IO.putStrLn
+
+iolock :: MVar ()
+iolock =
+  unsafePerformIO (newMVar ())
+{-# NOINLINE iolock #-}
