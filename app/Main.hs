@@ -52,10 +52,7 @@ main' = do
             when (Warp.defaultShouldDisplayException ex)
               (hPutStrLn stderr (displayException ex)))
 
--- Logging middleware:
---
---   200 GET /
---
+-- Logging middleware.
 log :: Given V => Wai.Application -> Wai.Application
 log app request respond =
   app request respond'
@@ -120,7 +117,16 @@ wsApp pconn = do
 
   runManaged (runCommand conn command)
 
-  -- TODO: Graceful teardown
+  WebSockets.sendClose conn ByteString.empty
+
+  fix $ \loop ->
+    try (WebSockets.receiveDataMessage conn) >>= \case
+      Left (WebSockets.CloseRequest _ _) ->
+        pure ()
+      Left ex ->
+        throw ex
+      Right _ ->
+        loop
 
 recvCommand :: Given V => WebSockets.Connection -> IO Command
 recvCommand conn = do

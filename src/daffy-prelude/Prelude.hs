@@ -18,7 +18,7 @@ import Control.Exception.Safe as X
   (catch, catchAny, finally, throw, try, tryAny)
 import Data.ByteString as X (ByteString)
 import Data.Either as X
-import Data.Function as X ((&))
+import Data.Function as X ((&), fix)
 import Data.IORef as X
 import Data.Text as X (Text, unpack)
 import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
