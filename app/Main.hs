@@ -35,7 +35,7 @@ import qualified Streaming.Prelude as Streaming
 
 main :: IO ()
 main =
-  give V1 main'
+  give V2 main'
 
 main' :: Given V => IO ()
 main' = do
@@ -104,7 +104,7 @@ httpApp request respond = do
     Wai.responseLBS status404 [] ""
 
 -- WebSockets app: receive one command to run, send back its output, exit code,
--- etc, and then tear down the connection.
+-- etc, and then loop.
 wsApp :: Given V => WebSockets.PendingConnection -> IO ()
 wsApp pconn = do
   v1 (show (WebSockets.pendingRequest pconn))
@@ -112,29 +112,16 @@ wsApp pconn = do
   conn :: WebSockets.Connection <-
     WebSockets.acceptRequest pconn
 
-  command :: Command <-
-    recvCommand conn
+  fix $ \loop -> do
+    command :: Command <-
+      recvCommand conn
 
-  when (null (Command.command command))
-    (throw (CommandParseException (Aeson.encode command) "empty string"))
+    when (null (Command.command command))
+      (throw (CommandParseException (Aeson.encode command) "empty string"))
 
-  runManaged (runCommand conn command)
+    runManaged (runCommand conn command)
 
-  v3 "SEND close frame"
-
-  WebSockets.sendClose conn ByteString.empty
-
-  v2 "Waiting for close frame"
-
-  fix $ \loop ->
-    try (WebSockets.receiveDataMessage conn) >>= \case
-      Left (WebSockets.CloseRequest _ _) ->
-        v3 "RECV close frame"
-      Left ex ->
-        throw ex
-      Right _ -> do
-        v3 "RECV some bytes, but waiting for close frame"
-        loop
+    loop
 
 recvCommand :: Given V => WebSockets.Connection -> IO Command
 recvCommand conn = do
@@ -287,12 +274,6 @@ sendText conn msg = do
   v3 ("SEND " ++ unpack (decodeUtf8 (LByteString.toStrict msg)))
   io (WebSockets.sendTextData conn msg)
 
-sendBinary
-  :: (Given V, MonadIO m) => WebSockets.Connection -> LByteString -> m ()
-sendBinary conn bytes = do
-  v3 ("SEND binary data (" ++ show (LByteString.length bytes) ++ " bytes)")
-  io (WebSockets.sendBinaryData conn bytes)
-
 sendStdout :: Given V => WebSockets.Connection -> ByteString -> IO ()
 sendStdout conn line =
   sendText conn (Aeson.encode blob)
@@ -340,18 +321,17 @@ sendStats conn stats =
 sendFlamegraph
   :: (Given V, MonadIO m) => WebSockets.Connection -> Text -> FilePath -> m ()
 sendFlamegraph conn name path = do
-  bytes :: LByteString <-
-    io (LByteString.readFile path)
+  bytes :: Text <-
+    io (Text.readFile path)
 
   let blob :: Value
       blob =
         Aeson.object
           [ "type" .= name
-          , "payload" .= LByteString.length bytes
+          , "payload" .= bytes
           ]
 
   sendText conn (Aeson.encode blob)
-  sendBinary conn bytes
 
 sendExitCode
   :: (Given V, MonadIO m) => WebSockets.Connection -> ExitCode -> m ()
