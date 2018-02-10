@@ -3,11 +3,11 @@ module Main exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
+import HtmlParser.Util exposing (toVirtualDomSvg)
 import Json.Decode exposing (..)
 import Json.Encode
 import Step exposing (Step)
 import WebSocket
-
 
 main : Program Never Model Msg
 main =
@@ -20,7 +20,7 @@ main =
 
 
 type Model
-    = Initial { command : String }
+    = Initial { command : String, stats : Bool }
     | RunningProgram RunningProgram
     | ProgramFailed ProgramOutput { exitCode : Int }
     | ExploringRun ProgramRun
@@ -36,6 +36,7 @@ type alias ProgramRun =
 
 type Msg
     = TypeCommand String
+    | ToggleStats Bool
     | RunCommand
     | ProgramRunMsg ProgramRunMsg
 
@@ -58,28 +59,32 @@ type alias ProgramOutput =
 type ProgramRunMsg
     = StdOutLine String
     | StdErrLine String
-    | ExitedWith Int
     | RunStats Stats
+    | ExitedWith Int
     | RunMsgParseErr String
 
 
 init : Model
 init =
-    Initial { command = "" }
+    Initial { command = "/home/mitchell/junk/bar", stats = False }
 
 
 update : Msg -> Model -> Step Model Msg Never
 update msg model =
     case ( model, msg ) of
-        ( Initial _, TypeCommand s ) ->
-            Step.to (Initial { command = s })
+        ( Initial model_, TypeCommand s ) ->
+            Step.to (Initial { model_ | command = s })
 
-        ( Initial { command }, RunCommand ) ->
+        ( Initial model_, ToggleStats b ) ->
+            Step.to (Initial { model_ | stats = b })
+
+        ( Initial model_, RunCommand ) ->
             Step.to (RunningProgram (StreamingOutput { stderr = [], stdout = [] }))
                 |> Step.withCmd
-                    ([ ( "command", Json.Encode.string command )
-                     , ( "stats", Json.Encode.bool True )
+                    ([ ( "command", Json.Encode.string model_.command )
+                     , ( "stats", Json.Encode.bool model_.stats )
                      , ( "eventlog", Json.Encode.bool False )
+                     , ( "prof", Json.Encode.bool True )
                      ]
                         |> Json.Encode.object
                         |> Json.Encode.encode 0
@@ -102,7 +107,7 @@ update msg model =
                     )
 
         _ ->
-            Step.noop
+            Debug.crash "bad message"
 
 
 subscriptions : Model -> Sub Msg
@@ -209,16 +214,26 @@ view model =
     in
         div [ class "p-8" ] <|
             case model of
-                Initial { command } ->
+                Initial model_ ->
                     [ div []
                         [ span [ class "text-lg mr-3" ] [ text "Command to Run" ]
                         , input
                             [ class "border"
                             , type_ "text"
-                            , Html.Attributes.value command
+                            , Html.Attributes.value model_.command
                             , Html.Events.onInput TypeCommand
                             ]
                             []
+                        , label
+                            []
+                            [ input
+                              [ type_ "checkbox"
+                              , Html.Events.onCheck ToggleStats
+                              , Html.Attributes.checked model_.stats
+                              ]
+                              []
+                            , text "Stats"
+                            ]
                         ]
                     , div [] [ button [ class "border shadow rounded px-2 py-1", type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
                     ]
