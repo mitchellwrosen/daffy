@@ -117,7 +117,7 @@ elmDecoder p =
       unlines $
         [ lower1 name ++ "Decoder : Decoder " ++ name
         , lower1 name ++ "Decoder ="
-        , "    decode" ++ name
+        , "    decode " ++ name
         ] ++ map ("        |> " ++) (elmDecoder' info)
     _ ->
       error "Not a record"
