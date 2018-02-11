@@ -1,5 +1,7 @@
 module Main exposing (..)
 
+import DaffyTypes exposing (..)
+
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
@@ -66,7 +68,7 @@ type ProgramRunMsg
 
 init : Model
 init =
-    Initial { command = "/home/mitchell/junk/bar", stats = False }
+    Initial { command = "", stats = False }
 
 
 update : Msg -> Model -> Step Model Msg Never
@@ -315,149 +317,6 @@ viewTable columns elements =
 
 -}
 
-
-type alias Stats =
-    { garbageCollections : List GCStats
-    , generationSummaries : List GenStats
-    , parallelGarbageCollection : Maybe ParallelGCStats
-    , tasks : Maybe TasksStats
-    , sparks : Maybe SparksStats
-    , runtimeInitTime : Time
-    , mutatorTime : Time
-    , garbageCollectionTime : Time
-    , runtimeShutdownTime : Time
-    , totalTime : Time
-    , percentGarbageCollectionTime : Maybe Time
-    }
-
-
-decodeStats : Json.Decode.Decoder Stats
-decodeStats =
-    let
-        map11 func a b c d e f g h i j k =
-            map8 func a b c d e f g h
-                |> Json.Decode.map4 (\x y z newFunc -> newFunc x y z) i j k
-    in
-        map11 Stats
-            (Json.Decode.field "garbageCollections" (Json.Decode.list decodeGCStats))
-            (Json.Decode.field "generationSummaries" (Json.Decode.list decodeGenStats))
-            (Json.Decode.field "parallelGarbageCollection" (Json.Decode.maybe decodeParallellGCStats))
-            (Json.Decode.field "tasks" (Json.Decode.maybe decodeTaskStats))
-            (Json.Decode.field "sparks" (Json.Decode.maybe decodeSparksStats))
-            (Json.Decode.field "runtimeInitTime" decodeTime)
-            (Json.Decode.field "mutatorTime" decodeTime)
-            (Json.Decode.field "garbageCollectionTime" decodeTime)
-            (Json.Decode.field "runtimeShutdownTime" decodeTime)
-            (Json.Decode.field "totalTime" decodeTime)
-            (Json.Decode.field "percentGarbageCollectionTime" (Json.Decode.maybe decodeTime))
-
-
-type alias GCStats =
-    { bytesAllocated : Int
-    , bytesCopied : Int
-    , liveBytes : Int
-    , time : Time
-    , totalTime : Time
-    , pageFaults : Int
-    , totalPageFaults : Int
-    , generation : Int
-    }
-
-
-decodeGCStats : Json.Decode.Decoder GCStats
-decodeGCStats =
-    Json.Decode.map8 GCStats
-        (Json.Decode.field "bytesAllocated" Json.Decode.int)
-        (Json.Decode.field "bytesCopied" Json.Decode.int)
-        (Json.Decode.field "liveBytes" Json.Decode.int)
-        (Json.Decode.field "time" decodeTime)
-        (Json.Decode.field "totalTime" decodeTime)
-        (Json.Decode.field "pageFaults" Json.Decode.int)
-        (Json.Decode.field "totalPageFaults" Json.Decode.int)
-        (Json.Decode.field "generation" Json.Decode.int)
-
-
-type alias GenStats =
-    { parallel : Int
-    , averagePauseTime : Float
-    , maxPauseTime : Float
-    }
-
-
-decodeGenStats : Json.Decode.Decoder GenStats
-decodeGenStats =
-    Json.Decode.map3 GenStats
-        (Json.Decode.field "parallel" Json.Decode.int)
-        (Json.Decode.field "averagePauseTime" Json.Decode.float)
-        (Json.Decode.field "maxPauseTime" Json.Decode.float)
-
-
-type alias ParallelGCStats =
-    { parallel : Float
-    , serial : Float
-    , perfect : Float
-    }
-
-
-decodeParallellGCStats : Json.Decode.Decoder ParallelGCStats
-decodeParallellGCStats =
-    Json.Decode.map3 ParallelGCStats
-        (Json.Decode.field "parallel" Json.Decode.float)
-        (Json.Decode.field "serial" Json.Decode.float)
-        (Json.Decode.field "perfect" Json.Decode.float)
-
-
-type alias TasksStats =
-    { tasks : Int
-    , bound : Int
-    , peakWorkers : Int
-    , totalWorkers : Int
-    }
-
-
-decodeTaskStats : Json.Decode.Decoder TasksStats
-decodeTaskStats =
-    Json.Decode.map4 TasksStats
-        (Json.Decode.field "tasks" Json.Decode.int)
-        (Json.Decode.field "bound" Json.Decode.int)
-        (Json.Decode.field "peakWorkers" Json.Decode.int)
-        (Json.Decode.field "totalWorkers" Json.Decode.int)
-
-
-type alias SparksStats =
-    { sparks : Int
-    , converted : Int
-    , overflowed : Int
-    , dud : Int
-    , garbageCollected : Int
-    , fizzled : Int
-    }
-
-
-decodeSparksStats : Decoder SparksStats
-decodeSparksStats =
-    map6 SparksStats
-        (field "sparks" int)
-        (field "converted" int)
-        (field "overflowed" int)
-        (field "dud" int)
-        (field "garbageCollected" int)
-        (field "fizzled" int)
-
-
-type alias Time =
-    { user : Float
-    , elapsed : Float
-    }
-
-
-decodeTime : Json.Decode.Decoder Time
-decodeTime =
-    Json.Decode.map2 Time
-        (Json.Decode.field "user" Json.Decode.float)
-        (Json.Decode.field "elapsed" Json.Decode.float)
-
-
 testStats : Stats
 testStats =
     { garbageCollections =
@@ -512,6 +371,8 @@ testStats =
     , runtimeInitTime = { user = 0.0, elapsed = 0.0 }
     , mutatorTime = { user = 0.0, elapsed = 0.0 }
     , garbageCollectionTime = { user = 0.0, elapsed = 0.0 }
+    , retainerProfilingTime = Just { user = 0.0, elapsed = 0.0 }
+    , otherProfilingTime = Just { user = 0.0, elapsed = 0.0 }
     , runtimeShutdownTime = { user = 0.0, elapsed = 0.0 }
     , totalTime = { user = 0.0, elapsed = 0.0 }
     , percentGarbageCollectionTime = Just { user = 0.0, elapsed = 0.0 }

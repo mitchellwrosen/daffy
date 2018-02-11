@@ -8,22 +8,28 @@ import Data.Proxy
 import Generics.SOP
 
 main :: IO ()
-main = do
-  putStrLn (elmType (Proxy :: Proxy GCStats))
-  putStrLn (elmType (Proxy :: Proxy GenStats))
-  putStrLn (elmType (Proxy :: Proxy ParallelGCStats))
-  putStrLn (elmType (Proxy :: Proxy SparksStats))
-  putStrLn (elmType (Proxy :: Proxy Stats))
-  putStrLn (elmType (Proxy :: Proxy TasksStats))
-  putStrLn (elmType (Proxy :: Proxy Time))
-
-  putStrLn (elmDecoder (Proxy :: Proxy GCStats))
-  putStrLn (elmDecoder (Proxy :: Proxy GenStats))
-  putStrLn (elmDecoder (Proxy :: Proxy ParallelGCStats))
-  putStrLn (elmDecoder (Proxy :: Proxy SparksStats))
-  putStrLn (elmDecoder (Proxy :: Proxy Stats))
-  putStrLn (elmDecoder (Proxy :: Proxy TasksStats))
-  putStrLn (elmDecoder (Proxy :: Proxy Time))
+main =
+  mapM_ putStrLn
+    [ "module DaffyTypes exposing (..)"
+    , ""
+    , "import Json.Decode exposing (..)"
+    , "import Json.Decode.Pipeline exposing (..)"
+    , ""
+    , elmType (Proxy :: Proxy GCStats)
+    , elmType (Proxy :: Proxy GenStats)
+    , elmType (Proxy :: Proxy ParallelGCStats)
+    , elmType (Proxy :: Proxy SparksStats)
+    , elmType (Proxy :: Proxy Stats)
+    , elmType (Proxy :: Proxy TasksStats)
+    , elmType (Proxy :: Proxy Time)
+    , elmDecoder (Proxy :: Proxy GCStats)
+    , elmDecoder (Proxy :: Proxy GenStats)
+    , elmDecoder (Proxy :: Proxy ParallelGCStats)
+    , elmDecoder (Proxy :: Proxy SparksStats)
+    , elmDecoder (Proxy :: Proxy Stats)
+    , elmDecoder (Proxy :: Proxy TasksStats)
+    , elmDecoder (Proxy :: Proxy Time)
+    ]
 
 instance Generic GCStats
 instance Generic GenStats

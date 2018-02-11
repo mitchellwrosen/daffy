@@ -1,7 +1,8 @@
 .ghc.environment.*
 .ghci
 .stack-work/
+daffy-client/codegen
+daffy-server/codegen
 dist/
 dist-newstyle/
 elm-stuff/
-static/daffy.js

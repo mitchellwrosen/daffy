@@ -14,7 +14,6 @@ module ElmCodegen
   , elmDecoder
   ) where
 
-import Data.Char (toLower)
 import Data.List (intercalate)
 import Generics.SOP
 
@@ -115,8 +114,8 @@ elmDecoder p =
   case datatypeInfo p of
     ADT _ name (Record _ info :* Nil) ->
       unlines $
-        [ lower1 name ++ "Decoder : Decoder " ++ name
-        , lower1 name ++ "Decoder ="
+        [ "decode" ++ name ++ " : Decoder " ++ name
+        , "decode" ++ name ++ " ="
         , "    decode " ++ name
         ] ++ map ("        |> " ++) (elmDecoder' info)
     _ ->
@@ -129,10 +128,3 @@ elmDecoder' = \case
   info@(FieldInfo name) :* infos ->
     ("required \"" ++ name ++ "\" " ++ renderElmDecoder info)
       : elmDecoder' infos
-
-lower1 :: [Char] -> [Char]
-lower1 = \case
-  [] ->
-    []
-  x:xs ->
-    toLower x : xs

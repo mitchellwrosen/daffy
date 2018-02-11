@@ -84,7 +84,7 @@ httpApp request respond = do
         "/" ->
           respond (htmlFile "static/index.html")
         "/daffy.js" ->
-          respond (jsFile "static/daffy.js")
+          respond (jsFile "codegen/daffy.js")
         _ ->
           respond notFound
     _ ->
