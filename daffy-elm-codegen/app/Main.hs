@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+
 import ElmCodegen
 
 import Daffy.Stats
@@ -14,6 +16,14 @@ main = do
   putStrLn (elmType (Proxy :: Proxy Stats))
   putStrLn (elmType (Proxy :: Proxy TasksStats))
   putStrLn (elmType (Proxy :: Proxy Time))
+
+  putStrLn (elmDecoder (Proxy :: Proxy GCStats))
+  putStrLn (elmDecoder (Proxy :: Proxy GenStats))
+  putStrLn (elmDecoder (Proxy :: Proxy ParallelGCStats))
+  putStrLn (elmDecoder (Proxy :: Proxy SparksStats))
+  putStrLn (elmDecoder (Proxy :: Proxy Stats))
+  putStrLn (elmDecoder (Proxy :: Proxy TasksStats))
+  putStrLn (elmDecoder (Proxy :: Proxy Time))
 
 instance Generic GCStats
 instance Generic GenStats
