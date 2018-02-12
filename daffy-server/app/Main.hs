@@ -4,15 +4,18 @@ import Daffy.Command (Command)
 import Daffy.Exception
 import Daffy.Stats (Stats)
 import Daffy.Supervisor (Supervisor)
+import Paths_daffy (getDataDir)
 
 import qualified Daffy.Command as Command
 #ifdef INOTIFY
 import qualified Daffy.Eventlog as Eventlog
 #endif
+import qualified Daffy.Profile as Profile
 import qualified Daffy.Stats as Stats
 import qualified Daffy.Supervisor as Supervisor
 
 import Data.Aeson (Value, (.=))
+import Data.List (intersperse)
 import Data.Reflection (Given, given, give)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
@@ -20,6 +23,7 @@ import Network.Wai.Handler.WebSockets (websocketsOr)
 import System.Directory (createDirectoryIfMissing, renameFile)
 import System.FilePath (takeFileName)
 import System.IO (IOMode(WriteMode))
+import System.IO.Unsafe (unsafePerformIO)
 import System.Process.Typed
 
 import qualified Data.Aeson as Aeson
@@ -166,6 +170,23 @@ runCommand conn command = do
       eventlog =
         progname ++ ".eventlog"
 
+  let proffile :: FilePath
+      proffile =
+        workdir ++ progname ++ ".prof"
+
+  let statsfile :: FilePath
+      statsfile =
+        workdir ++ progname ++ ".stats"
+
+  when (Command.eventlog command)
+    (v2 ("Writing eventlog to " ++ workdir ++ eventlog))
+
+  when (Command.prof command)
+    (v2 ("Writing profile to " ++ proffile))
+
+  when (Command.stats command)
+    (v2 ("Writing stats to " ++ statsfile))
+
   -- If Linux, incrementally parse the eventlog as it's written to by GHC. Turns
   -- out this doesn't exactly stream the eventlog in real time, as it's only
   -- flushed every so often. I believe writing a custom "EventLogWriter"
@@ -173,8 +194,6 @@ runCommand conn command = do
   -- have to do, for now.
 #ifdef INOTIFY
   when (Command.eventlog command) $ do
-    v2 ("Writing eventlog to " ++ workdir ++ eventlog)
-
     -- Truncate the old eventlog (if any)
     io (withFile eventlog WriteMode (const (pure ())))
 
@@ -183,19 +202,12 @@ runCommand conn command = do
       (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.parse eventlog)))
 #endif
 
-  let statsfile :: FilePath
-      statsfile =
-        workdir ++ progname ++ ".stats"
-
-  when (Command.stats command)
-    (v2 ("Writing stats to " ++ statsfile))
-
   -- Spawn the process.
-  v1 ("Running: " ++ Command.render statsfile command)
+  v1 ("Running: " ++ Command.render (workdir ++ progname) statsfile command)
   process :: Process () Handle Handle <-
     managed
       (withProcess
-        (shell (Command.render statsfile command)
+        (shell (Command.render (workdir ++ progname) statsfile command)
           & setStdout createPipe
           & setStderr createPipe))
 
@@ -212,23 +224,23 @@ runCommand conn command = do
     waitExitCode process
   v1 (show code)
 
+  -- Wait for background threads forwarding stdout, stderr, and possibly the
+  -- eventlog, to finish sending data.
+  Supervisor.wait supervisor
+
   -- We can't have GHC write to a custom eventlog destination, so just crudely
   -- move it after the process is done.
   when (Command.eventlog command)
     (io (void (tryAny (renameFile eventlog (workdir ++ eventlog)))))
-
-  -- Wait for background threads forwarding stdout, stderr, and possibly the
-  -- eventlog, to finish sending data.
-  Supervisor.wait supervisor
 
   -- If we didn't stream the eventlog, send all of the events out now.
 #ifndef INOTIFY
   when (Command.eventlog command) $ do
     io (tryAny (GHC.readEventLogFromFile (workdir ++ eventlog))) >>= \case
       Left _ ->
-        v2 ("{\"eventlog\": true}, but " ++ workdir ++ eventlog ++ " not found")
+        v2 (workdir ++ eventlog ++ " not found")
       Right (Left err) ->
-        io (throw (EventlogParseException err))
+        io (throw (EventlogParseException err (workdir ++ eventlog)))
       Right (Right (GHC.dat -> GHC.Data events)) ->
         forM_ events (sendEvent conn)
 #endif
@@ -237,45 +249,83 @@ runCommand conn command = do
   when (Command.stats command) $
     io (tryAny (Text.readFile statsfile)) >>= \case
       Left _ ->
-        v2 ("{\"stats\": true}, but " ++ statsfile ++ " not found")
+        v2 (statsfile ++ " not found")
       Right bytes ->
         -- Drop a line, because when directing -S output to a file, the command
         -- invocation is written at the top.
         case Stats.parse (Text.dropWhile (/= '\n') bytes) of
           Left err ->
-            io (throw (StatsParseException bytes err))
+            io (throw (StatsParseException err statsfile))
           Right stats ->
             sendStats conn stats
 
   -- Send time and alloc flamegraph paths
   when (Command.prof command) $ do
-    let prof :: FilePath
-        prof =
-          progname ++ ".prof"
+    io (tryAny (LByteString.readFile proffile)) >>= \case
+      Left ex ->
+        v2 (proffile ++ " not found: " ++ show ex)
+      Right bytes ->
+        case Profile.parse bytes of
+          Left err ->
+            io (throw (ProfileParseException err proffile))
+          Right prof -> do
+            let ticks_entries :: [Text]
+                ticks_entries =
+                  Profile.ticksFlamegraph prof
 
-    let mktickssvg :: [Char]
-        mktickssvg =
-          "ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ workdir
-            ++ progname ++ "-ticks.svg"
+            unless (null ticks_entries) $ do
+              let tickssvg :: FilePath
+                  tickssvg =
+                    progname ++ "-ticks.svg"
 
-    v2 ("Running: " ++ mktickssvg)
+              let ticksflamegraph :: [Char]
+                  ticksflamegraph =
+                    flamegraph ++ " --title '" ++ progname ++ " (ticks)' "
+                      ++ "--countname ticks " ++ "--nametype 'Cost center:' "
+                      ++ "--colors purple"
 
-    runProcess_ (shell mktickssvg & setStdout closed)
+              v2
+                ("Running: " ++ ticksflamegraph ++ " > " ++ workdir ++ tickssvg)
 
-    sendFlamegraph conn "ticks-flamegraph" (progname ++ "-ticks.svg")
+              io (withFile (workdir ++ tickssvg) WriteMode $ \h ->
+                runProcess_
+                  (shell ticksflamegraph
+                    & setStdin (byteStringInput (linesInput ticks_entries))
+                    & setStdout (useHandleClose h)))
 
-    let mkbytessvg :: [Char]
-        mkbytessvg =
-          "ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ workdir
-            ++ progname ++ "-bytes.svg"
+              sendFlamegraph conn "ticks-flamegraph" tickssvg
 
-    v2 ("Running: " ++ mkbytessvg)
+            let bytes_entries :: [Text]
+                bytes_entries =
+                  Profile.allocFlamegraph prof
 
-    runProcess_ (shell mkbytessvg & setStdout closed)
+            unless (null bytes_entries) $ do
+              let bytessvg :: FilePath
+                  bytessvg =
+                    progname ++ "-bytes.svg"
 
-    sendFlamegraph conn "bytes-flamegraph" (progname ++ "-bytes.svg")
+              let bytesflamegraph :: [Char]
+                  bytesflamegraph =
+                    flamegraph ++ " --title '" ++ progname ++ " (bytes)' "
+                      ++ "--countname bytes " ++ "--nametype 'Cost center:' "
+                      ++ "--colors purple"
+
+              v2
+                ("Running: " ++ bytesflamegraph ++ " > " ++ workdir ++ bytessvg)
+
+              io (withFile (workdir ++ bytessvg) WriteMode $ \h ->
+                runProcess_
+                  (shell bytesflamegraph
+                    & setStdin (byteStringInput (linesInput bytes_entries))
+                    & setStdout (useHandleClose h)))
+
+              sendFlamegraph conn "bytes-flamegraph" bytessvg
 
   sendExitCode conn code
+
+linesInput :: [Text] -> LByteString
+linesInput =
+  LByteString.fromChunks . intersperse (Char8.singleton '\n') . map encodeUtf8
 
 --------------------------------------------------------------------------------
 -- Send blobby blobs
@@ -357,6 +407,17 @@ sendExitCode conn code =
             ExitFailure n ->
               n
       ]
+
+--------------------------------------------------------------------------------
+-- flamegraph.pl
+
+flamegraph :: FilePath
+flamegraph =
+  unsafePerformIO $ do
+    data_dir :: FilePath <-
+      getDataDir
+    pure (data_dir ++ "/submodules/FlameGraph/flamegraph.pl")
+{-# NOINLINE flamegraph #-}
 
 --------------------------------------------------------------------------------
 -- Verbosity

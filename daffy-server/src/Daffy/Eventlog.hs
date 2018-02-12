@@ -83,25 +83,29 @@ parse path = do
     lift (managed (withBinaryFile path ReadMode))
 
   hoist io
-    (parseEvents GHC.decodeEventLog (fromHandle (eventlogEvent var) handle))
+    (parseEvents path GHC.decodeEventLog
+      (fromHandle (eventlogEvent var) handle))
 
 parseEvents
-  :: GHC.Decoder GHC.Event -> SByteString IO () -> Stream (Of GHC.Event) IO ()
-parseEvents decoder bytes =
+  :: FilePath
+  -> GHC.Decoder GHC.Event
+  -> SByteString IO ()
+  -> Stream (Of GHC.Event) IO ()
+parseEvents path decoder bytes =
   case decoder of
     GHC.Consume k ->
       io (SByteString.unconsChunk bytes) >>= \case
         Nothing ->
           pure ()
         Just (chunk, bytes') ->
-          parseEvents (k chunk) bytes'
+          parseEvents path (k chunk) bytes'
     GHC.Produce event decoder' -> do
       yields (event :> ())
-      parseEvents decoder' bytes
+      parseEvents path decoder' bytes
     GHC.Done _ ->
       error "Done"
     GHC.Error _ err ->
-      lift (throw (EventlogParseException err))
+      lift (throw (EventlogParseException err path))
 
 fromHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
 fromHandle waitEvent handle =

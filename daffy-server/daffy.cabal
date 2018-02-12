@@ -14,17 +14,20 @@ license: BSD3
 license-file: LICENSE
 build-type: Simple
 cabal-version: 1.23
-tested-with: GHC == 8.0.1
-           , GHC == 8.0.2
-           , GHC == 8.2.1
-           , GHC == 8.2.2
-           , GHC == 8.4.1
 extra-source-files:
   .travis.yml
   cabal.project
   stack.yaml
   LICENSE
+  test/files/prof/*.txt
   test/files/stats/*.txt
+data-files:
+  submodules/FlameGraph/flamegraph.pl
+tested-with: GHC == 8.0.1
+           , GHC == 8.0.2
+           , GHC == 8.2.1
+           , GHC == 8.2.2
+           , GHC == 8.4.1
 
 source-repository head
   type: git
@@ -89,8 +92,12 @@ library daffy-prelude
   default-language: Haskell2010
 
 executable daffy
-  main-is: Main.hs
   hs-source-dirs: app
+  main-is: Main.hs
+  other-modules:
+    Paths_daffy
+  autogen-modules:
+    Paths_daffy
   ghc-options: -threaded -Wall
   build-depends:
       aeson

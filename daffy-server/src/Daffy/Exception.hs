@@ -8,9 +8,10 @@ import qualified Data.ByteString.Lazy as LByteString
 
 data DaffyException
   = CommandParseException LByteString [Char]
-  | EventlogParseException [Char]
+  | EventlogParseException [Char] FilePath
   | InfoParseException LByteString
-  | StatsParseException Text [Char]
+  | ProfileParseException [Char] FilePath
+  | StatsParseException [Char] FilePath
   deriving (Show, Typeable)
 
 instance Exception DaffyException where
@@ -22,8 +23,8 @@ instance Exception DaffyException where
         , unpack (decodeUtf8 (LByteString.toStrict bytes))
         ]
 
-    EventlogParseException err ->
-      "Failed to parse event log: " ++ err
+    EventlogParseException err path ->
+      "Failed to parse event log (" ++ path ++ "): " ++ err
 
     InfoParseException bytes ->
       intercalate "\n"
@@ -31,8 +32,8 @@ instance Exception DaffyException where
         , unpack (decodeUtf8 (LByteString.toStrict bytes))
         ]
 
-    StatsParseException bytes err ->
-      intercalate "\n"
-        [ "Failed to parse runtime stats: " ++ err
-        , unpack bytes
-        ]
+    ProfileParseException err path ->
+      "Failed to parse profile (" ++ path ++ "): " ++ err
+
+    StatsParseException err path ->
+      "Failed to parse stats (" ++ path ++ "): " ++ err

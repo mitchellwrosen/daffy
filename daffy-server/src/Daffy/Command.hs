@@ -16,18 +16,18 @@ instance FromJSON Command
 instance ToJSON Command
 
 -- | Render a 'Command' as a full shell command including all RTS opts.
-render :: FilePath -> Command -> [Char]
-render statsfile cmd =
+render :: FilePath -> FilePath -> Command -> [Char]
+render proffile statsfile cmd =
   concat
     [ command cmd
     , " +RTS"
-    , if stats cmd
-        then " -S" ++ statsfile
-        else ""
     , if eventlog cmd
         then " -l"
         else ""
     , if prof cmd
-        then " -pa"
+        then " -pj -po" ++ proffile
+        else ""
+    , if stats cmd
+        then " -S" ++ statsfile
         else ""
     ]
