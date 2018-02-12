@@ -1,0 +1,130 @@
+{
+"program": "foo",
+"arguments": ["./foo"],
+"rts_arguments": ["-pj"],
+"end_time": "Sun Feb 11 23:18 2018",
+"initial_capabilities": 0,
+"total_time":        4.98,
+"total_ticks": 4982,
+"tick_interval": 1000,
+"total_alloc":10279136880,
+"cost_centres": [
+{"id": 115, "label": "IDLE", "module": "IDLE", "src_loc": "<built-in>", "is_caf": false}, {"id": 114, "label": "PINNED", "module": "SYSTEM", "src_loc": "<built-in>", "is_caf": false}, {"id": 113, "label": "DONT_CARE", "module": "MAIN", "src_loc": "<built-in>", "is_caf": false}, {"id": 112, "label": "OVERHEAD_of", "module": "PROFILING", "src_loc": "<built-in>", "is_caf": false}, {"id": 111, "label": "GC", "module": "GC", "src_loc": "<built-in>", "is_caf": false}, {"id": 110, "label": "SYSTEM", "module": "SYSTEM", "src_loc": "<built-in>", "is_caf": false}, {"id": 109, "label": "MAIN", "module": "MAIN", "src_loc": "<built-in>", "is_caf": false}, {"id": 108, "label": "CAF", "module": "GHC.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 107, "label": "CAF", "module": "GHC.Tuple", "src_loc": "<entire-module>", "is_caf": true}, {"id": 106, "label": "CAF", "module": "GHC.Classes", "src_loc": "<entire-module>", "is_caf": true}, {"id": 105, "label": "CAF", "module": "GHC.CString", "src_loc": "<entire-module>", "is_caf": true}, {"id": 104, "label": "CAF", "module": "GHC.Integer.Type", "src_loc": "<entire-module>", "is_caf": true}, {"id": 103, "label": "CAF", "module": "GHC.Integer.Logarithms.Internals", "src_loc": "<entire-module>", "is_caf": true}, {"id": 102, "label": "CAF", "module": "GHC.Integer.Logarithms", "src_loc": "<entire-module>", "is_caf": true}, {"id": 101, "label": "CAF", "module": "GHC.Event.Array", "src_loc": "<entire-module>", "is_caf": true}, {"id": 100, "label": "CAF", "module": "GHC.Event.Arr", "src_loc": "<entire-module>", "is_caf": true}, {"id": 99, "label": "CAF", "module": "Data.Proxy", "src_loc": "<entire-module>", "is_caf": true}, {"id": 98, "label": "CAF", "module": "GHC.Event.Poll", "src_loc": "<entire-module>", "is_caf": true}, {"id": 97, "label": "CAF", "module": "GHC.Event.PSQ", "src_loc": "<entire-module>", "is_caf": true}, {"id": 96, "label": "CAF", "module": "GHC.Event.Manager", "src_loc": "<entire-module>", "is_caf": true}, {"id": 95, "label": "CAF", "module": "GHC.Event.IntTable", "src_loc": "<entire-module>", "is_caf": true}, {"id": 94, "label": "CAF", "module": "GHC.Event.EPoll", "src_loc": "<entire-module>", "is_caf": true}, {"id": 93, "label": "CAF", "module": "GHC.Event.Control", "src_loc": "<entire-module>", "is_caf": true}, {"id": 92, "label": "CAF", "module": "System.Posix.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 91, "label": "CAF", "module": "GHC.TypeNats", "src_loc": "<entire-module>", "is_caf": true}, {"id": 90, "label": "CAF", "module": "GHC.TypeLits", "src_loc": "<entire-module>", "is_caf": true}, {"id": 89, "label": "CAF", "module": "GHC.Storable", "src_loc": "<entire-module>", "is_caf": true}, {"id": 88, "label": "CAF", "module": "GHC.Natural", "src_loc": "<entire-module>", "is_caf": true}, {"id": 87, "label": "CAF", "module": "GHC.IO.FD", "src_loc": "<entire-module>", "is_caf": true}, {"id": 86, "label": "CAF", "module": "GHC.IO.Device", "src_loc": "<entire-module>", "is_caf": true}, {"id": 85, "label": "CAF", "module": "GHC.IO.BufferedIO", "src_loc": "<entire-module>", "is_caf": true}, {"id": 84, "label": "CAF", "module": "GHC.Generics", "src_loc": "<entire-module>", "is_caf": true}, {"id": 83, "label": "CAF", "module": "GHC.Float.RealFracMethods", "src_loc": "<entire-module>", "is_caf": true}, {"id": 82, "label": "CAF", "module": "GHC.Float.ConversionUtils", "src_loc": "<entire-module>", "is_caf": true}, {"id": 81, "label": "CAF", "module": "GHC.Float", "src_loc": "<entire-module>", "is_caf": true}, {"id": 80, "label": "CAF", "module": "GHC.Enum", "src_loc": "<entire-module>", "is_caf": true}, {"id": 79, "label": "CAF", "module": "GHC.Char", "src_loc": "<entire-module>", "is_caf": true}, {"id": 78, "label": "CAF", "module": "GHC.Arr", "src_loc": "<entire-module>", "is_caf": true}, {"id": 77, "label": "CAF", "module": "Foreign.Storable", "src_loc": "<entire-module>", "is_caf": true}, {"id": 76, "label": "CAF", "module": "Foreign.Marshal.Array", "src_loc": "<entire-module>", "is_caf": true}, {"id": 75, "label": "CAF", "module": "Foreign.Marshal.Alloc", "src_loc": "<entire-module>", "is_caf": true}, {"id": 74, "label": "CAF", "module": "Foreign.C.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 73, "label": "CAF", "module": "Foreign.C.String", "src_loc": "<entire-module>", "is_caf": true}, {"id": 72, "label": "CAF", "module": "Foreign.C.Error", "src_loc": "<entire-module>", "is_caf": true}, {"id": 71, "label": "CAF", "module": "Data.Type.Equality", "src_loc": "<entire-module>", "is_caf": true}, {"id": 70, "label": "CAF", "module": "Data.Tuple", "src_loc": "<entire-module>", "is_caf": true}, {"id": 69, "label": "CAF", "module": "Data.Maybe", "src_loc": "<entire-module>", "is_caf": true}, {"id": 68, "label": "CAF", "module": "Data.Dynamic", "src_loc": "<entire-module>", "is_caf": true}, {"id": 67, "label": "CAF", "module": "Data.Bits", "src_loc": "<entire-module>", "is_caf": true}, {"id": 66, "label": "CAF", "module": "Control.Monad.Fail", "src_loc": "<entire-module>", "is_caf": true}, {"id": 65, "label": "CAF", "module": "GHC.Event.Unique", "src_loc": "<entire-module>", "is_caf": true}, {"id": 64, "label": "CAF", "module": "GHC.Event.TimerManager", "src_loc": "<entire-module>", "is_caf": true}, {"id": 63, "label": "CAF", "module": "GHC.Event.Thread", "src_loc": "<entire-module>", "is_caf": true}, {"id": 62, "label": "CAF", "module": "GHC.Event.Internal", "src_loc": "<entire-module>", "is_caf": true}, {"id": 61, "label": "CAF", "module": "Data.Typeable.Internal", "src_loc": "<entire-module>", "is_caf": true}, {"id": 60, "label": "CAF", "module": "Data.OldList", "src_loc": "<entire-module>", "is_caf": true}, {"id": 59, "label": "CAF", "module": "Text.Read.Lex", "src_loc": "<entire-module>", "is_caf": true}, {"id": 58, "label": "CAF", "module": "Text.ParserCombinators.ReadPrec", "src_loc": "<entire-module>", "is_caf": true}, {"id": 57, "label": "CAF", "module": "Text.ParserCombinators.ReadP", "src_loc": "<entire-module>", "is_caf": true}, {"id": 56, "label": "CAF", "module": "System.Posix.Internals", "src_loc": "<entire-module>", "is_caf": true}, {"id": 55, "label": "CAF", "module": "System.IO", "src_loc": "<entire-module>", "is_caf": true}, {"id": 54, "label": "CAF", "module": "Numeric", "src_loc": "<entire-module>", "is_caf": true}, {"id": 53, "label": "CAF", "module": "GHC.Word", "src_loc": "<entire-module>", "is_caf": true}, {"id": 52, "label": "CAF", "module": "GHC.Weak", "src_loc": "<entire-module>", "is_caf": true}, {"id": 51, "label": "CAF", "module": "GHC.Unicode", "src_loc": "<entire-module>", "is_caf": true}, {"id": 50, "label": "CAF", "module": "GHC.TopHandler", "src_loc": "<entire-module>", "is_caf": true}, {"id": 49, "label": "CAF", "module": "GHC.Stack.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 48, "label": "CAF", "module": "GHC.Stack.CCS", "src_loc": "<entire-module>", "is_caf": true}, {"id": 47, "label": "CAF", "module": "GHC.Stable", "src_loc": "<entire-module>", "is_caf": true}, {"id": 46, "label": "CAF", "module": "GHC.Show", "src_loc": "<entire-module>", "is_caf": true}, {"id": 45, "label": "CAF", "module": "GHC.STRef", "src_loc": "<entire-module>", "is_caf": true}, {"id": 44, "label": "CAF", "module": "GHC.ST", "src_loc": "<entire-module>", "is_caf": true}, {"id": 43, "label": "CAF", "module": "GHC.Real", "src_loc": "<entire-module>", "is_caf": true}, {"id": 42, "label": "CAF", "module": "GHC.Read", "src_loc": "<entire-module>", "is_caf": true}, {"id": 41, "label": "CAF", "module": "GHC.Ptr", "src_loc": "<entire-module>", "is_caf": true}, {"id": 40, "label": "CAF", "module": "GHC.Pack", "src_loc": "<entire-module>", "is_caf": true}, {"id": 39, "label": "CAF", "module": "GHC.Num", "src_loc": "<entire-module>", "is_caf": true}, {"id": 38, "label": "CAF", "module": "GHC.MVar", "src_loc": "<entire-module>", "is_caf": true}, {"id": 37, "label": "CAF", "module": "GHC.List", "src_loc": "<entire-module>", "is_caf": true}, {"id": 36, "label": "CAF", "module": "GHC.Int", "src_loc": "<entire-module>", "is_caf": true}, {"id": 35, "label": "CAF", "module": "GHC.IORef", "src_loc": "<entire-module>", "is_caf": true}, {"id": 34, "label": "CAF", "module": "GHC.IO.Unsafe", "src_loc": "<entire-module>", "is_caf": true}, {"id": 33, "label": "CAF", "module": "GHC.IO.IOMode", "src_loc": "<entire-module>", "is_caf": true}, {"id": 32, "label": "CAF", "module": "GHC.IO.Handle.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 31, "label": "CAF", "module": "GHC.IO.Handle.Text", "src_loc": "<entire-module>", "is_caf": true}, {"id": 30, "label": "CAF", "module": "GHC.IO.Handle.Internals", "src_loc": "<entire-module>", "is_caf": true}, {"id": 29, "label": "CAF", "module": "GHC.IO.Handle.FD", "src_loc": "<entire-module>", "is_caf": true}, {"id": 28, "label": "CAF", "module": "GHC.IO.Handle", "src_loc": "<entire-module>", "is_caf": true}, {"id": 27, "label": "CAF", "module": "GHC.IO.Exception", "src_loc": "<entire-module>", "is_caf": true}, {"id": 26, "label": "CAF", "module": "GHC.IO.Encoding.UTF8", "src_loc": "<entire-module>", "is_caf": true}, {"id": 25, "label": "CAF", "module": "GHC.IO.Encoding.UTF32", "src_loc": "<entire-module>", "is_caf": true}, {"id": 24, "label": "CAF", "module": "GHC.IO.Encoding.UTF16", "src_loc": "<entire-module>", "is_caf": true}, {"id": 23, "label": "CAF", "module": "GHC.IO.Encoding.Types", "src_loc": "<entire-module>", "is_caf": true}, {"id": 22, "label": "CAF", "module": "GHC.IO.Encoding.Latin1", "src_loc": "<entire-module>", "is_caf": true}, {"id": 21, "label": "CAF", "module": "GHC.IO.Encoding.Iconv", "src_loc": "<entire-module>", "is_caf": true}, {"id": 20, "label": "CAF", "module": "GHC.IO.Encoding.Failure", "src_loc": "<entire-module>", "is_caf": true}, {"id": 19, "label": "CAF", "module": "GHC.IO.Encoding", "src_loc": "<entire-module>", "is_caf": true}, {"id": 18, "label": "CAF", "module": "GHC.IO.Buffer", "src_loc": "<entire-module>", "is_caf": true}, {"id": 17, "label": "CAF", "module": "GHC.IO", "src_loc": "<entire-module>", "is_caf": true}, {"id": 16, "label": "CAF", "module": "GHC.ForeignPtr", "src_loc": "<entire-module>", "is_caf": true}, {"id": 15, "label": "CAF", "module": "GHC.Foreign", "src_loc": "<entire-module>", "is_caf": true}, {"id": 14, "label": "CAF", "module": "GHC.Fingerprint.Type", "src_loc": "<entire-module>", "is_caf": true}, {"id": 13, "label": "CAF", "module": "GHC.Fingerprint", "src_loc": "<entire-module>", "is_caf": true}, {"id": 12, "label": "CAF", "module": "GHC.Exception", "src_loc": "<entire-module>", "is_caf": true}, {"id": 11, "label": "CAF", "module": "GHC.Err", "src_loc": "<entire-module>", "is_caf": true}, {"id": 10, "label": "CAF", "module": "GHC.Conc.Sync", "src_loc": "<entire-module>", "is_caf": true}, {"id": 9, "label": "CAF", "module": "GHC.Conc.Signal", "src_loc": "<entire-module>", "is_caf": true}, {"id": 8, "label": "CAF", "module": "GHC.Conc.IO", "src_loc": "<entire-module>", "is_caf": true}, {"id": 7, "label": "CAF", "module": "GHC.Base", "src_loc": "<entire-module>", "is_caf": true}, {"id": 6, "label": "CAF", "module": "Data.Either", "src_loc": "<entire-module>", "is_caf": true}, {"id": 5, "label": "CAF", "module": "Control.Exception.Base", "src_loc": "<entire-module>", "is_caf": true}, {"id": 4, "label": "main", "module": "Main", "src_loc": "foo.hs:(7,1)-(9,27)", "is_caf": false}, {"id": 3, "label": "fib", "module": "Main", "src_loc": "foo.hs:(12,1)-(14,29)", "is_caf": false}, {"id": 2, "label": "fact", "module": "Main", "src_loc": "foo.hs:(17,1)-(19,23)", "is_caf": false}, {"id": 1, "label": "CAF", "module": "Main", "src_loc": "<entire-module>", "is_caf": true}]
+,
+"profile": {"id": 109, "entries": 0, "alloc": 664, "ticks": 0, "children": [{"id": 1, "entries": 0, "alloc": 32, "ticks": 0, "children": [{"id": 4, "entries": 1, "alloc": 280, "ticks": 0, "children": [{"id": 3, "entries": 29860703, "alloc": 2149970544, "ticks": 2099, "children": []}
+,{"id": 2, "entries": 80000, "alloc": 7040420368, "ticks": 833, "children": []}
+]}
+]}
+,{"id": 5, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 6, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 7, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 8, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 9, "entries": 0, "alloc": 640, "ticks": 0, "children": []}
+,{"id": 10, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 11, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 12, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 13, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 14, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 15, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 16, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 17, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 18, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 19, "entries": 0, "alloc": 2768, "ticks": 0, "children": []}
+,{"id": 20, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 21, "entries": 0, "alloc": 216, "ticks": 0, "children": []}
+,{"id": 22, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 23, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 24, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 25, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 26, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 27, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 28, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 29, "entries": 0, "alloc": 34928, "ticks": 0, "children": []}
+,{"id": 30, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 31, "entries": 0, "alloc": 88, "ticks": 0, "children": []}
+,{"id": 32, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 33, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 34, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 35, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 36, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 37, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 38, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 39, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 40, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 41, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 42, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 43, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 44, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 45, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 46, "entries": 0, "alloc": 160, "ticks": 0, "children": []}
+,{"id": 47, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 48, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 49, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 50, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 51, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 52, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 53, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 54, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 55, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 56, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 57, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 58, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 59, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 60, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 61, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 62, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 63, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 64, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 65, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 66, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 67, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 68, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 69, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 70, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 71, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 72, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 73, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 74, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 75, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 76, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 77, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 78, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 79, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 80, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 81, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 82, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 83, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 84, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 85, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 86, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 87, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 88, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 89, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 90, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 91, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 92, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 93, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 94, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 95, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 96, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 97, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 98, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 99, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 100, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 101, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 102, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 103, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 104, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 105, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 106, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 107, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 108, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 113, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 111, "entries": 0, "alloc": 0, "ticks": 2019, "children": []}
+,{"id": 115, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 112, "entries": 0, "alloc": 1082665464, "ticks": 0, "children": []}
+,{"id": 114, "entries": 0, "alloc": 0, "ticks": 0, "children": []}
+,{"id": 110, "entries": 0, "alloc": 6028352, "ticks": 31, "children": []}
+,{"id": 4, "entries": 0, "alloc": 12376, "ticks": 0, "children": []}
+]}
+}

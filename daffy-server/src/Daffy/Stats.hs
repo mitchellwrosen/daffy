@@ -1,6 +1,6 @@
 {-# options_ghc -fno-warn-name-shadowing #-}
 
--- | Parsing @+RTS -S -RTS@ stats.
+-- | Parsing @+RTS -S@ statistics.
 
 module Daffy.Stats
   ( Stats(..)

@@ -38,18 +38,21 @@ library
     , attoparsec
     , base-noprelude
     , bytestring
+    , containers
     , daffy-prelude
     , ghc-events
     , streaming
     , streaming-bytestring
     , text
     , typed-process
+    , vector
   if os(linux)
     build-depends: hinotify
   exposed-modules:
     Daffy.Command
     Daffy.Exception
     Daffy.Info
+    Daffy.Profile
     Daffy.Stats
     Daffy.Supervisor
   if os(linux)
@@ -75,11 +78,13 @@ library daffy-prelude
       async
     , base >= 4.9 && < 4.11
     , bytestring
+    , containers
     , managed
     , safe-exceptions
     , stm
     , streaming-bytestring
     , text
+    , vector
   exposed-modules: Prelude
   default-language: Haskell2010
 

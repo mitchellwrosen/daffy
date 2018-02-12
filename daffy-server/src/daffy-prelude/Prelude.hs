@@ -3,6 +3,7 @@ module Prelude
   , LByteString
   , SByteString
   , hPutStrLn
+  , identity
   , io
   , putStrLn
   ) where
@@ -21,14 +22,16 @@ import Control.Exception.Safe as X
 import Data.ByteString as X (ByteString)
 import Data.Either as X
 import Data.Function as X ((&), fix)
+import Data.IntMap.Strict as X (IntMap)
 import Data.IORef as X
 import Data.Semigroup as X ((<>))
-import Data.Text as X (Text, unpack)
+import Data.Text as X (Text, pack, unpack)
 import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
 import Data.Typeable as X (Typeable)
+import Data.Vector as X (Vector)
 import Debug.Trace as X
 import GHC.Generics as X (Generic)
-import "base" Prelude as X hiding (String, log, putStrLn)
+import "base" Prelude as X hiding (String, id, log, putStrLn)
 import System.IO as X (Handle, stderr, withFile)
 import System.Exit as X (ExitCode(..), exitFailure)
 import Text.Read as X (readMaybe)
@@ -37,6 +40,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.ByteString.Lazy
 import qualified Data.ByteString.Streaming
+import qualified "base" Prelude
 import qualified System.IO
 
 type LByteString
@@ -48,6 +52,10 @@ type SByteString
 hPutStrLn :: MonadIO m => Handle -> [Char] -> m ()
 hPutStrLn handle =
   liftIO . withMVar iolock . const . System.IO.hPutStrLn handle
+
+identity :: a -> a
+identity =
+  Prelude.id
 
 io :: MonadIO m => IO a -> m a
 io =

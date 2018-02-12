@@ -3,6 +3,7 @@ module Main where
 import Daffy.Info (Feature(..), Info(..))
 
 import qualified Daffy.Info
+import qualified Daffy.Profile as Profile
 import qualified Daffy.Stats as Stats
 
 import System.Directory
@@ -21,6 +22,7 @@ spec :: Spec
 spec = do
   eventlogSpec
   infoSpec
+  profSpec
   statsSpec
 
 eventlogSpec :: Spec
@@ -53,6 +55,17 @@ infoSpec = do
   setup :: (([Char] -> IO Info) -> IO ()) -> IO ()
   setup run =
     run (\opts -> ghc opts Daffy.Info.run)
+
+profSpec :: Spec
+profSpec = do
+  describe "parsing '+RTS -pj' output" $ do
+    files :: [FilePath] <-
+      runIO (listDirectory "test/files/prof")
+
+    forM_ files $ \file ->
+      it file $ do
+        contents <- LByteString.readFile ("test/files/prof/" ++ file)
+        Profile.parse contents `shouldSatisfy` isRight
 
 statsSpec :: Spec
 statsSpec = do

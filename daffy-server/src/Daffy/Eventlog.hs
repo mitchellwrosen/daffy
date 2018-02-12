@@ -90,7 +90,7 @@ parseEvents
 parseEvents decoder bytes =
   case decoder of
     GHC.Consume k ->
-      liftIO (SByteString.unconsChunk bytes) >>= \case
+      io (SByteString.unconsChunk bytes) >>= \case
         Nothing ->
           pure ()
         Just (chunk, bytes') ->
