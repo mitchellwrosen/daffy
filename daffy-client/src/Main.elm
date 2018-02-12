@@ -116,7 +116,7 @@ update msg model =
                     )
 
         _ ->
-            Debug.crash "bad message"
+            Step.noop
 
 
 subscriptions : Model -> Sub Msg
