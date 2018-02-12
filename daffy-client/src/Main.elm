@@ -122,12 +122,6 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        Initial _ ->
-            Sub.none
-
-        MsgParseError _ ->
-            Sub.none
-
         RunningProgram runningProgram ->
             Sub.map RunningProgramMsg <|
                 WebSocket.listen "ws://localhost:8080"
@@ -140,8 +134,8 @@ subscriptions model =
                                 RunMsgParseErr string
                     )
 
-        ExploringRun programRun ->
-            Sub.none
+        _ ->
+            WebSocket.keepAlive "ws://localhost:8080"
 
 
 decodeRunMsg : Decoder RunningProgramMsg
