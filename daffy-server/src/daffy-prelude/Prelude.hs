@@ -22,6 +22,7 @@ import Data.ByteString as X (ByteString)
 import Data.Either as X
 import Data.Function as X ((&), fix)
 import Data.IORef as X
+import Data.Semigroup as X ((<>))
 import Data.Text as X (Text, unpack)
 import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
 import Data.Typeable as X (Typeable)

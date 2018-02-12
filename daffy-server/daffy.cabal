@@ -91,6 +91,7 @@ executable daffy
       aeson
     , base-noprelude
     , bytestring
+    , directory
     , daffy
     , daffy-prelude
     , filepath

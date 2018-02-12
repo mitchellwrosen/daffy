@@ -17,6 +17,7 @@ import Data.Reflection (Given, given, give)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
+import System.Directory (createDirectoryIfMissing, renameFile)
 import System.FilePath (takeFileName)
 import System.IO (IOMode(WriteMode))
 import System.Process.Typed
@@ -33,8 +34,13 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WebSockets
 import qualified Streaming.Prelude as Streaming
 
+workdir :: FilePath
+workdir =
+  ".daffy/"
+
 main :: IO ()
-main =
+main = do
+  createDirectoryIfMissing False workdir
   give V2 main'
 
 main' :: Given V => IO ()
@@ -85,6 +91,8 @@ httpApp request respond = do
           respond (htmlFile "static/index.html")
         "/daffy.js" ->
           respond (jsFile "codegen/daffy.js")
+        path | ByteString.isSuffixOf ".svg" path ->
+          respond (svgFile (workdir ++ Char8.unpack path))
         _ ->
           respond notFound
     _ ->
@@ -98,6 +106,10 @@ httpApp request respond = do
   jsFile :: FilePath -> Wai.Response
   jsFile file =
     Wai.responseFile status200 [(hContentType, "application/json")] file Nothing
+
+  svgFile :: FilePath -> Wai.Response
+  svgFile file =
+    Wai.responseFile status200 [(hContentType, "image/svg+xml")] file Nothing
 
   notFound :: Wai.Response
   notFound =
@@ -161,7 +173,7 @@ runCommand conn command = do
   -- have to do, for now.
 #ifdef INOTIFY
   when (Command.eventlog command) $ do
-    v2 ("Writing eventlog to " ++ eventlog)
+    v2 ("Writing eventlog to " ++ workdir ++ eventlog)
 
     -- Truncate the old eventlog (if any)
     io (withFile eventlog WriteMode (const (pure ())))
@@ -173,7 +185,7 @@ runCommand conn command = do
 
   let statsfile :: FilePath
       statsfile =
-        progname ++ ".stats"
+        workdir ++ progname ++ ".stats"
 
   when (Command.stats command)
     (v2 ("Writing stats to " ++ statsfile))
@@ -200,6 +212,11 @@ runCommand conn command = do
     waitExitCode process
   v1 (show code)
 
+  -- We can't have GHC write to a custom eventlog destination, so just crudely
+  -- move it after the process is done.
+  when (Command.eventlog command)
+    (io (void (tryAny (renameFile eventlog (workdir ++ eventlog)))))
+
   -- Wait for background threads forwarding stdout, stderr, and possibly the
   -- eventlog, to finish sending data.
   Supervisor.wait supervisor
@@ -207,9 +224,9 @@ runCommand conn command = do
   -- If we didn't stream the eventlog, send all of the events out now.
 #ifndef INOTIFY
   when (Command.eventlog command) $ do
-    io (tryAny (GHC.readEventLogFromFile eventlog)) >>= \case
+    io (tryAny (GHC.readEventLogFromFile (workdir ++ eventlog))) >>= \case
       Left _ ->
-        v2 ("{\"eventlog\": true}, but " ++ eventlog ++ " not found")
+        v2 ("{\"eventlog\": true}, but " ++ workdir ++ eventlog ++ " not found")
       Right (Left err) ->
         io (throw (EventlogParseException err))
       Right (Right (GHC.dat -> GHC.Data events)) ->
@@ -230,39 +247,33 @@ runCommand conn command = do
           Right stats ->
             sendStats conn stats
 
-  -- Send time and alloc flamegraphs
+  -- Send time and alloc flamegraph paths
   when (Command.prof command) $ do
     let prof :: FilePath
         prof =
           progname ++ ".prof"
 
-    let tickssvg :: FilePath
-        tickssvg =
-          progname ++ "-ticks.svg"
-
     let mktickssvg :: [Char]
         mktickssvg =
-          "ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ tickssvg
+          "ghc-prof-flamegraph --ticks " ++ prof ++ " -o " ++ workdir
+            ++ progname ++ "-ticks.svg"
 
     v2 ("Running: " ++ mktickssvg)
 
     runProcess_ (shell mktickssvg & setStdout closed)
 
-    sendFlamegraph conn "ticks-flamegraph" tickssvg
-
-    let bytessvg :: FilePath
-        bytessvg =
-          progname ++ "-bytes.svg"
+    sendFlamegraph conn "ticks-flamegraph" (progname ++ "-ticks.svg")
 
     let mkbytessvg :: [Char]
         mkbytessvg =
-          "ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ bytessvg
+          "ghc-prof-flamegraph --bytes " ++ prof ++ " -o " ++ workdir
+            ++ progname ++ "-bytes.svg"
 
     v2 ("Running: " ++ mkbytessvg)
 
     runProcess_ (shell mkbytessvg & setStdout closed)
 
-    sendFlamegraph conn "bytes-flamegraph" bytessvg
+    sendFlamegraph conn "bytes-flamegraph" (progname ++ "-bytes.svg")
 
   sendExitCode conn code
 
@@ -321,17 +332,14 @@ sendStats conn stats =
 sendFlamegraph
   :: (Given V, MonadIO m) => WebSockets.Connection -> Text -> FilePath -> m ()
 sendFlamegraph conn name path = do
-  bytes :: Text <-
-    io (Text.readFile path)
-
-  let blob :: Value
-      blob =
-        Aeson.object
-          [ "type" .= name
-          , "payload" .= bytes
-          ]
-
   sendText conn (Aeson.encode blob)
+ where
+  blob :: Value
+  blob =
+    Aeson.object
+      [ "type" .= name
+      , "payload" .= path
+      ]
 
 sendExitCode
   :: (Given V, MonadIO m) => WebSockets.Connection -> ExitCode -> m ()
