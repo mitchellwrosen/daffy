@@ -4,7 +4,6 @@ import DaffyTypes exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
-import HtmlParser.Util exposing (toVirtualDomSvg)
 import Json.Decode exposing (..)
 import Json.Encode
 import Step exposing (Step)
@@ -23,16 +22,31 @@ main =
 
 type Model
     = Initial { command : String, stats : Bool }
-    | RunningProgram RunningProgram
-    | ProgramFailed ProgramOutput { exitCode : Int }
+    | RunningProgram ProgramOutput
+    | MsgParseError String
     | ExploringRun ProgramRun
+
+
+type alias ProgramOutput =
+    { stderr : List String
+    , stdout : List String
+    , stats : Maybe Stats
+    , ticks : Maybe SvgPath
+    , bytes : Maybe SvgPath
+    }
+
+
+type alias SvgPath =
+    String
 
 
 type alias ProgramRun =
     { stdout : List String
     , stderr : List String
     , exitCode : Int
-    , stats : Stats
+    , ticks : Maybe SvgPath
+    , bytes : Maybe SvgPath
+    , stats : Maybe Stats
     }
 
 
@@ -40,7 +54,7 @@ type Msg
     = TypeCommand String
     | ToggleStats Bool
     | RunCommand
-    | ProgramRunMsg ProgramRunMsg
+    | RunningProgramMsg RunningProgramMsg
 
 
 type RunExplorationMsg
@@ -49,21 +63,14 @@ type RunExplorationMsg
     | ConfirmFilter
 
 
-type RunningProgram
-    = StreamingOutput ProgramOutput
-    | WaitingForStats ProgramOutput
-
-
-type alias ProgramOutput =
-    { stderr : List String, stdout : List String }
-
-
-type ProgramRunMsg
+type RunningProgramMsg
     = StdOutLine String
     | StdErrLine String
     | RunStats Stats
     | ExitedWith Int
     | RunMsgParseErr String
+    | GotTicks SvgPath
+    | GotBytes SvgPath
 
 
 init : Model
@@ -81,7 +88,7 @@ update msg model =
             Step.to (Initial { model_ | stats = b })
 
         ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram (StreamingOutput { stderr = [], stdout = [] }))
+            Step.to (RunningProgram { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -93,16 +100,16 @@ update msg model =
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
-        ( RunningProgram runningProgram, ProgramRunMsg programRunMsg ) ->
+        ( RunningProgram runningProgram, RunningProgramMsg programRunMsg ) ->
             stepRunningProgram programRunMsg runningProgram
                 |> Step.map RunningProgram
-                |> Step.mapMsg ProgramRunMsg
+                |> Step.mapMsg RunningProgramMsg
                 |> Step.onExit
                     (\result ->
                         Step.to <|
                             case result of
-                                Err ( output, code ) ->
-                                    ProgramFailed output code
+                                Err parseErr ->
+                                    MsgParseError parseErr
 
                                 Ok run ->
                                     ExploringRun run
@@ -118,11 +125,11 @@ subscriptions model =
         Initial _ ->
             Sub.none
 
-        ProgramFailed _ _ ->
+        MsgParseError _ ->
             Sub.none
 
         RunningProgram runningProgram ->
-            Sub.map ProgramRunMsg <|
+            Sub.map RunningProgramMsg <|
                 WebSocket.listen "ws://localhost:8080"
                     (\raw ->
                         case Json.Decode.decodeString decodeRunMsg raw of
@@ -137,7 +144,7 @@ subscriptions model =
             Sub.none
 
 
-decodeRunMsg : Decoder ProgramRunMsg
+decodeRunMsg : Decoder RunningProgramMsg
 decodeRunMsg =
     let
         payload =
@@ -166,37 +173,54 @@ decodeRunMsg =
                             payload decodeStats
                                 |> Json.Decode.map RunStats
 
+                        "ticks-flamegraph" ->
+                            payload string
+                                |> Json.Decode.map GotTicks
+
+                        "bytes-flamegraph" ->
+                            payload string
+                                |> Json.Decode.map GotBytes
+
                         _ ->
                             Json.Decode.fail "couldn't parse message from server"
                 )
 
 
-stepRunningProgram : ProgramRunMsg -> RunningProgram -> Step RunningProgram msg (Result ( ProgramOutput, { exitCode : Int } ) ProgramRun)
-stepRunningProgram programRunMsg runningProgram =
-    case ( runningProgram, programRunMsg ) of
-        ( StreamingOutput data, StdOutLine line ) ->
-            Step.to (StreamingOutput { data | stdout = line :: data.stdout })
+type alias ParseErr =
+    String
 
-        ( StreamingOutput data, StdErrLine line ) ->
-            Step.to (StreamingOutput { data | stderr = line :: data.stderr })
 
-        ( StreamingOutput data, ExitedWith code ) ->
-            case code of
-                0 ->
-                    Step.to (WaitingForStats data)
 
-                nonZero ->
-                    Step.exit (Err ( data, { exitCode = code } ))
+-- type Step model msg output =
+--     To model (Cmd msg)
+--     | Noop
+--     | Output output
+-- stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result ParseErr ProgramRun)
 
-        ( WaitingForStats data, RunStats stats ) ->
-            Step.exit (Ok { stdout = data.stdout, stderr = data.stderr, exitCode = 0, stats = stats })
 
-        ( _, RunMsgParseErr err ) ->
-            Debug.log "parse error" err
-                |> \_ -> Step.noop
+stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result String ProgramRun)
+stepRunningProgram programRunMsg ({ stdout, stderr, stats, ticks, bytes } as programOutput) =
+    case programRunMsg of
+        StdOutLine line ->
+            Step.to { programOutput | stdout = line :: stdout }
 
-        _ ->
-            Step.noop
+        StdErrLine line ->
+            Step.to { programOutput | stderr = line :: stderr }
+
+        ExitedWith code ->
+            Step.exit (Ok { stdout = stdout, stderr = stderr, stats = stats, exitCode = code, ticks = ticks, bytes = bytes })
+
+        RunStats stats ->
+            Step.to { programOutput | stats = Just stats }
+
+        RunMsgParseErr err ->
+            Step.exit (Err err)
+
+        GotTicks ticks ->
+            Step.to { programOutput | ticks = Just ticks }
+
+        GotBytes bytes ->
+            Step.to { programOutput | bytes = Just bytes }
 
 
 view : Model -> Html Msg
@@ -240,26 +264,30 @@ view model =
                     , div [] [ button [ class "border shadow rounded px-2 py-1", type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
                     ]
 
-                RunningProgram runningProgram ->
-                    [ case runningProgram of
-                        StreamingOutput programOutput ->
-                            viewProgramOutput programOutput
-
-                        WaitingForStats programOutput ->
-                            viewProgramOutput programOutput
+                RunningProgram programOutput ->
+                    [ viewProgramOutput programOutput
                     ]
 
-                ProgramFailed programOutput { exitCode } ->
-                    [ div [] [ text <| "progam failed with exit code " ++ toString exitCode ]
-                    , viewProgramOutput programOutput
-                    ]
+                MsgParseError parseError ->
+                    [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
                 ExploringRun programRun ->
                     [ viewProgramOutput programRun
-                    , div []
-                        [ h1 [] [ text "Garbage Collections" ]
-                        , viewTable gcTableConfig programRun.stats.garbageCollections
-                        ]
+                    , Maybe.map (\path -> object [ Html.Attributes.attribute "data" path ] []) programRun.ticks
+                        |> Maybe.withDefault (text "")
+                    , Maybe.map
+                        (\path -> object [ Html.Attributes.attribute "data" path ] [])
+                        programRun.bytes
+                        |> Maybe.withDefault (text "")
+                    , case programRun.stats of
+                        Just stats ->
+                            div []
+                                [ h1 [] [ text "Garbage Collections" ]
+                                , viewTable gcTableConfig stats.garbageCollections
+                                ]
+
+                        Nothing ->
+                            text ""
                     ]
 
 
