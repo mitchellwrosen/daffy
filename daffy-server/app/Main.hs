@@ -262,7 +262,7 @@ runCommand conn command = do
 
     runProcess_ (shell mkbytessvg & setStdout closed)
 
-    sendFlamegraph conn "bytes-flamegraph" tickssvg
+    sendFlamegraph conn "bytes-flamegraph" bytessvg
 
   sendExitCode conn code
 
