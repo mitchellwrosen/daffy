@@ -15,9 +15,6 @@ license-file: LICENSE
 build-type: Simple
 cabal-version: 1.23
 extra-source-files:
-  .travis.yml
-  cabal.project
-  stack.yaml
   LICENSE
   test/files/prof/*.txt
   test/files/stats/*.txt
