@@ -416,7 +416,7 @@ flamegraph =
   unsafePerformIO $ do
     data_dir :: FilePath <-
       getDataDir
-    pure (data_dir ++ "/submodules/FlameGraph/flamegraph.pl")
+    pure ("perl " ++ data_dir ++ "/submodules/FlameGraph/flamegraph.pl")
 {-# NOINLINE flamegraph #-}
 
 --------------------------------------------------------------------------------
