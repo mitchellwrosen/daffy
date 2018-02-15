@@ -6,3 +6,4 @@ packages:
 extra-deps:
   - base-noprelude-4.10.1.0
   - process-1.5.0.0
+  - shake-0.16.2

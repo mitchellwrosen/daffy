@@ -6,10 +6,11 @@ cabal-version: >= 1.2
 executable Shakefile
   hs-source-dirs: .
   main-is: Shakefile.hs
-  ghc-options: -Wall -threaded -rtsopts
+  ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-I0 -qb -qg"
   build-depends:
       base
+    , containers
     , directory
-    , process
-    , shake
+    , fsnotify
+    , shake >= 0.16.1
     , unix

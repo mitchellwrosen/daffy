@@ -1,0 +1,9 @@
+#!/bin/sh
+
+set -e
+
+if [ ! -x "bin/Shakefile" ]; then
+  stack install --local-bin-path bin daffy-shakefile:exe:Shakefile
+fi
+
+exec "bin/Shakefile" "$@"
