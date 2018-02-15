@@ -1,7 +1,9 @@
 .daffy
 .ghc.environment.*
 .ghci
+.shake/
 .stack-work/
+bin/
 daffy-client/codegen
 daffy-server/codegen
 dist/

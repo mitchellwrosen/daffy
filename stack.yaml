@@ -1,7 +1,8 @@
 resolver: lts-10.3
 packages:
-  - daffy-server
   - daffy-elm-codegen
+  - daffy-server
+  - daffy-shakefile
 extra-deps:
   - base-noprelude-4.10.1.0
   - process-1.5.0.0

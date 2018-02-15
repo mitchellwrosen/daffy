@@ -1,0 +1,15 @@
+name: daffy-shakefile
+version: 0
+build-type: Simple
+cabal-version: >= 1.2
+
+executable Shakefile
+  hs-source-dirs: .
+  main-is: Shakefile.hs
+  ghc-options: -Wall -threaded -rtsopts
+  build-depends:
+      base
+    , directory
+    , process
+    , shake
+    , unix
