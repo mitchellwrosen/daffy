@@ -272,7 +272,7 @@ view model =
                 ]
     in
         div [ class "container" ] <|
-            [ h1 [ class "heading" ] [ text "daffy" ]
+            [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ]
             ]
                 ++ case model of
                     Initial model_ ->
@@ -323,13 +323,13 @@ view model =
                             Just stats ->
                                 div []
                                     [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
-                                        [ LineChart.line Color.purple
+                                        [ LineChart.line (Color.rgb 255 99 71)
                                             Dots.none
                                             "Last Run"
                                             stats.garbageCollections
                                         ]
                                     , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
-                                        [ LineChart.line Color.purple
+                                        [ LineChart.line (Color.rgb 255 99 71)
                                             Dots.none
                                             "Last Run"
                                             stats.garbageCollections

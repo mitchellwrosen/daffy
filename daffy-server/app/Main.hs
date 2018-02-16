@@ -298,7 +298,7 @@ runCommand conn command = do
                   ticksflamegraph =
                     flamegraph ++ " --title '" ++ progname ++ " (ticks)' "
                       ++ "--countname ticks " ++ "--nametype 'Cost center:' "
-                      ++ "--colors purple"
+                      ++ "--colors hot"
 
               v2
                 ("Running: " ++ ticksflamegraph ++ " > " ++ workdir
@@ -325,7 +325,7 @@ runCommand conn command = do
                   bytesflamegraph =
                     flamegraph ++ " --title '" ++ progname ++ " (bytes)' "
                       ++ "--countname bytes " ++ "--nametype 'Cost center:' "
-                      ++ "--colors purple"
+                      ++ "--colors hot"
 
               v2
                 ("Running: " ++ bytesflamegraph ++ " > " ++ workdir
