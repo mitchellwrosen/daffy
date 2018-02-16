@@ -1,5 +1,4 @@
 {-# language CPP #-}
-{-# language TemplateHaskell #-}
 
 import Daffy.Command (Command)
 import Daffy.Exception
@@ -21,8 +20,8 @@ import Data.Reflection (Given, given, give)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
-import System.Directory
-  (createDirectoryIfMissing, getCurrentDirectory, renameFile)
+import System.Directory (createDirectoryIfMissing, renameFile)
+import System.Environment (lookupEnv)
 import System.FilePath (takeFileName)
 import System.IO (IOMode(WriteMode))
 import System.IO.Unsafe (unsafePerformIO)
@@ -35,8 +34,6 @@ import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text as Text (dropWhile)
 import qualified Data.Text.IO as Text
 import qualified GHC.RTS.Events as GHC
-import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as TH
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WebSockets
@@ -416,14 +413,14 @@ sendExitCode conn code =
 -- Data files
 
 data_dir :: FilePath
-#ifdef DEVELOPMENT
 data_dir =
-  $(TH.runIO getCurrentDirectory >>= TH.lift) ++ "/daffy-server"
-#else
-data_dir =
-  unsafePerformIO getDataDir
+  unsafePerformIO $
+    lookupEnv "DAFFY_DEV" >>= \case
+      Nothing ->
+        getDataDir
+      Just _ ->
+        pure "./daffy-server"
 {-# NOINLINE data_dir #-}
-#endif
 
 flamegraph :: FilePath
 flamegraph =
