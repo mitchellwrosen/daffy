@@ -259,17 +259,18 @@ stepRunningProgram programRunMsg ({ stdout, stderr, stats, ticks, bytes } as pro
 view : Model -> Html Msg
 view model =
     let
-        viewProgramOutput { stdout, stderr } =
-            div []
-                [ div []
-                    [ h1 [] [ text "Standard Out" ]
-                    , p [] [ text <| String.join "\n" (List.reverse stdout) ]
+        viewProgramOutput programData { stdout, stderr } =
+            let
+                whatMatters =
+                    if (List.length stderr) > 0 then
+                        stderr
+                    else
+                        stdout
+            in
+                div [ class "command-form" ]
+                    [ span [ class "ps1" ] [ text <| "$ " ++ programData.command ]
+                    , p [] [ text <| String.join "\n" (List.reverse whatMatters) ]
                     ]
-                , div []
-                    [ h1 [] [ text "Standard Error" ]
-                    , p [] [ text <| String.join "\n" (List.reverse stderr) ]
-                    ]
-                ]
     in
         div [ class "container" ] <|
             [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ]
@@ -303,16 +304,16 @@ view model =
                             ]
                         ]
 
-                    RunningProgram _ programOutput ->
-                        [ viewProgramOutput programOutput
+                    RunningProgram programData programOutput ->
+                        [ viewProgramOutput programData programOutput
                         ]
 
                     MsgParseError parseError ->
                         [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                    ExploringRun _ programRun ->
-                        [ button [ class "btn", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
-                        , viewProgramOutput programRun
+                    ExploringRun programData programRun ->
+                        [ button [ class "btn btn-back", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                        , viewProgramOutput programData programRun
                         , Maybe.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.ticks
                             |> Maybe.withDefault (text "")
                         , Maybe.map
