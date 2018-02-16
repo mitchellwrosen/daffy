@@ -4,17 +4,40 @@
 import Control.Concurrent (newChan, readChan)
 import Development.Shake
 import System.Directory (getCurrentDirectory)
+import System.Environment (getArgs, getEnvironment, withArgs)
 import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
+import UnliftIO (tryAny)
 
 import qualified Data.Set as Set
-import qualified System.Environment as Env
 
 main :: IO ()
-main = do
-  stack <- newResourceIO "stack" 1
-  shakeArgs options (mconcat (rules (withResource stack 1)))
+main =
+  getArgs >>= \case
+    ["watch"] ->
+      withArgs [] $ do
+        _ <- tryAny run
+        cwd <- getCurrentDirectory
+        files <-
+          Set.fromList . map ((cwd ++) . ('/':)) . lines
+            <$> readFile ".shake/live"
+        withManager $ \mgr -> do
+          chan <- newChan
+          _ <- watchTreeChan mgr "." ((`elem` files) . eventPath) chan
+          _ <- readChan chan
+          pure ()
+        env <- getEnvironment
+        executeFile "bin/Shakefile" False ["watch"] (Just env)
+    _ -> do
+      putStrLn "Run, NOT watch"
+      run
  where
+  run :: IO ()
+  run = do
+    -- Only run one copy of stack at a time.
+    stack <- newResourceIO "stack" 1
+    shakeArgs options (mconcat (rules (withResource stack 1)))
+
   options :: ShakeOptions
   options =
     shakeOptions
@@ -25,33 +48,14 @@ main = do
       , shakeThreads = 4
       }
 
--- The files we want to build, in no particular order.
-targets :: [FilePath]
-targets =
-  [ "bin/daffy"
-  , "bin/Shakefile"
-  , "daffy-server/codegen/daffy.js"
-  ]
-
 rules :: (forall a. Action a -> Action a) -> [Rules ()]
 rules stack =
-  [ want targets
-
-  , phony "watch" $ do
-      runAfter $ do
-        cwd <- getCurrentDirectory
-        files <-
-          Set.delete "watch" . Set.fromList . map ((cwd ++) . ('/':)) . lines
-            <$> readFile ".shake/live"
-        withManager $ \mgr -> do
-          chan <- newChan
-          _ <- watchTreeChan mgr "." ((`elem` files) . eventPath) chan
-          _ <- readChan chan
-          pure ()
-        env <- Env.getEnvironment
-        executeFile "bin/Shakefile" False ["watch"] (Just env)
-
-      need targets
+    -- The files we want to build, in no particular order.
+  [ want
+      [ "bin/daffy"
+      , "bin/Shakefile"
+      , "daffy-server/codegen/daffy.js"
+      ]
 
   , "bin/daffy" %> \_ -> do
       files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
