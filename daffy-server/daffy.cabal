@@ -20,6 +20,7 @@ extra-source-files:
   test/files/stats/*.txt
 data-files:
   codegen/daffy.js
+  static/index.html
   submodules/FlameGraph/flamegraph.pl
 tested-with: GHC == 8.0.1
            , GHC == 8.0.2

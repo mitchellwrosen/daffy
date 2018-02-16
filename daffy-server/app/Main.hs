@@ -91,10 +91,10 @@ httpApp request respond = do
   case Wai.requestMethod request of
     "GET" ->
       case Wai.rawPathInfo request of
-        "/" ->
-          respond (htmlFile "static/index.html")
+        "/" -> do
+          respond (htmlFile (data_dir ++ "/static/index.html"))
         "/daffy.js" ->
-          respond (jsFile "codegen/daffy.js")
+          respond (jsFile (data_dir ++ "/codegen/daffy.js"))
         path | ByteString.isSuffixOf ".svg" path ->
           respond (svgFile (workdir ++ Char8.unpack path))
         _ ->
@@ -409,15 +409,16 @@ sendExitCode conn code =
       ]
 
 --------------------------------------------------------------------------------
--- flamegraph.pl
+-- Data files
+
+data_dir :: FilePath
+data_dir =
+  unsafePerformIO getDataDir
+{-# NOINLINE data_dir #-}
 
 flamegraph :: FilePath
 flamegraph =
-  unsafePerformIO $ do
-    data_dir :: FilePath <-
-      getDataDir
-    pure ("perl " ++ data_dir ++ "/submodules/FlameGraph/flamegraph.pl")
-{-# NOINLINE flamegraph #-}
+  "perl " ++ data_dir ++ "/submodules/FlameGraph/flamegraph.pl"
 
 --------------------------------------------------------------------------------
 -- Verbosity
