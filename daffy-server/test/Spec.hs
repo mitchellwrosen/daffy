@@ -3,16 +3,19 @@ module Main where
 import Daffy.Info (Feature(..), Info(..))
 
 import qualified Daffy.Info
+import qualified Daffy.Eventlog as Eventlog
 import qualified Daffy.Profile as Profile
 import qualified Daffy.Stats as Stats
 
 import System.Directory
+import System.IO (IOMode(ReadMode), withBinaryFile)
 import System.IO.Temp
 import System.Process.Typed
 import Test.Hspec
 
 import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text.IO as Text
+import qualified Streaming.Prelude as Streaming
 
 main :: IO ()
 main =
@@ -26,8 +29,15 @@ spec = do
   statsSpec
 
 eventlogSpec :: Spec
-eventlogSpec =
-  pure ()
+eventlogSpec = do
+  files :: [FilePath] <-
+    runIO (listDirectory "test/files/eventlog")
+
+  describe "parsing '+RTS -l' output" $ do
+    forM_ files $ \file ->
+      it file $
+        withBinaryFile ("test/files/eventlog/" ++ file) ReadMode $ \handle ->
+          Streaming.effects (Eventlog.parse file handle)
 
 infoSpec :: Spec
 infoSpec = do

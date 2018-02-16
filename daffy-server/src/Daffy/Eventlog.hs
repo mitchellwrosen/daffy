@@ -1,5 +1,6 @@
 module Daffy.Eventlog
   ( parse
+  , stream
   ) where
 
 import Daffy.Exception
@@ -15,100 +16,76 @@ import qualified GHC.RTS.Events as GHC (Event)
 import qualified GHC.RTS.Events.Incremental as GHC
 import qualified System.INotify as INotify
 
--- The simplest, single-celled "pub-sub" abstraction in the world: an MVar
--- inside a TMVar.
+-- Incrementally parsing an eventlog is a bit of a struggle. GHC is writing
+-- binary event data to a file, so we use the "ghc-events" library to
+-- parse the bytes as they come. So far, so good... until we hit EOF! If GHC
+-- hasn't closed the file, then more events are to come, at which point we will
+-- no longer be at EOF.
 --
--- If there is a subscriber (i.e. someone interested in an EventlogEvent), they
--- will fill the TMvar with an empty MVar. When the publisher has an event, they
--- will fill the MVar (if any), and clear the TVar in the process. Thus, events
--- produced when there is no interested subscriber are dropped on the floor.
+-- So, we use inotify to register interest in "modify" and "close" events on the
+-- file, and thus, the simplest, single-celled "pub-sub" abstraction in the
+-- world was born: an MVar inside a TMVar.
 --
--- As a special ending condition, we don't care if there is no subscriber when
--- we have an 'EventLogClosed' message to publish (the final event), because
--- we know the subscriber will eventually want to see this message, even
--- though they happen to be busy right now. So, we block, waiting for an MVar
--- to appear.
-type Cell
-  = TMVar (MVar EventlogEvent)
+-- An *empty* TMVar indicates that there is *no subscriber*, so any "modify"
+-- events that the "publisher" (inotify callback thread) might publish should
+-- just be thrown away (without an MVar, there isn't anywhere to publish *to*).
+-- The lack of interested subscriber at this moment is totally normal: during
+-- incremental parsing of the eventlog, yet more events were appended to the
+-- file.
+--
+-- A *full* TMVar indicates that there *is* a subscriber: at some point in the
+-- past, EOF was reached by the incremental parser, and it would like to be
+-- woken up are more bytes to be read. How do we let it know? We put into the
+-- MVar it left for us!
+--
+-- Then there is the teardown dance: the publisher, should it receive a "closed"
+-- event to publish, should definitely not throw it away if there happens to be
+-- no subscriber at the moment, because unlike "modify" events, only one "close"
+-- event will ever be published, and it's imperative the subscriber sees it. So,
+-- the publisher blocks, waiting for an MVar to appear for it to put into.
+--
+-- The subscriber, in turn, will eventually receive the "close" message. At this
+-- point it should continue reading until EOF one last time (in case more bytes
+-- were written in-between the subscriber seeing EOF and actually subscribing),
+-- after which it will have seen all the bytes.
 
-data EventlogEvent
-  = EventlogModified
-  | EventlogClosed
+--------------------------------------------------------------------------------
+-- Streaming eventlog parsing
 
-eventlogModified :: Cell -> IO ()
-eventlogModified var =
-  atomically (tryTakeTMVar var) >>= \case
-    Nothing ->
-      pure ()
-    Just box ->
-      putMVar box EventlogModified
-
-eventlogClosed :: Cell -> IO ()
-eventlogClosed var = do
-  box :: MVar EventlogEvent <-
-    atomically (takeTMVar var)
-  putMVar box EventlogClosed
-
-eventlogEvent :: Cell -> IO EventlogEvent
-eventlogEvent var = do
-  box :: MVar EventlogEvent <-
-    newEmptyMVar
-  atomically (tryPutTMVar var box) >>= \case
-    False ->
-      error "eventlogEvent: TMVar full"
-    True ->
-      takeMVar box
-
--- | @parse logfile@ incrementally parses an eventlog file.
-parse :: FilePath -> Stream (Of GHC.Event) Managed ()
-parse path = do
-  var :: Cell <-
+-- | @stream logfile@ incrementally parses an eventlog file.
+stream :: FilePath -> Stream (Of GHC.Event) Managed ()
+stream path = do
+  var :: PubSub <-
     io newEmptyTMVarIO
 
   inotify :: INotify <-
     lift (managed withINotify)
 
-  let f :: INotify.Event -> IO ()
-      f = \case
-        INotify.Modified{} ->
-          eventlogModified var
-        INotify.Closed{} -> do
-          eventlogClosed var
-        _ ->
-          pure ()
+  void . io $ do
+    let events :: [INotify.EventVariety]
+        events =
+          [INotify.Modify, INotify.Close]
 
-  _ <- io (INotify.addWatch inotify [INotify.Modify, INotify.Close] path f)
+    let publisher :: INotify.Event -> IO ()
+        publisher = \case
+          INotify.Modified{} ->
+            publish var EventlogModified
+          INotify.Closed{} ->
+            publish var EventlogClosed
+          _ ->
+            pure ()
+
+    INotify.addWatch inotify events path publisher
 
   handle :: Handle <-
     lift (managed (withBinaryFile path ReadMode))
 
   hoist io
-    (parseEvents path GHC.decodeEventLog
-      (fromHandle (eventlogEvent var) handle))
+    (eventStream path GHC.decodeEventLog
+      (streamHandle (subscribe var) handle))
 
-parseEvents
-  :: FilePath
-  -> GHC.Decoder GHC.Event
-  -> SByteString IO ()
-  -> Stream (Of GHC.Event) IO ()
-parseEvents path decoder bytes =
-  case decoder of
-    GHC.Consume k ->
-      io (SByteString.unconsChunk bytes) >>= \case
-        Nothing ->
-          pure ()
-        Just (chunk, bytes') ->
-          parseEvents path (k chunk) bytes'
-    GHC.Produce event decoder' -> do
-      yields (event :> ())
-      parseEvents path decoder' bytes
-    GHC.Done _ ->
-      error "Done"
-    GHC.Error _ err ->
-      lift (throw (EventlogParseException err path))
-
-fromHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
-fromHandle waitEvent handle =
+streamHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
+streamHandle waitEvent handle =
   loop False
  where
   loop :: Bool -> SByteString IO ()
@@ -126,3 +103,68 @@ fromHandle waitEvent handle =
       else do
         SByteString.chunk bytes
         loop False
+
+type PubSub
+  = TMVar (MVar EventlogEvent)
+
+data EventlogEvent
+  = EventlogModified
+  | EventlogClosed
+
+publish :: PubSub -> EventlogEvent -> IO ()
+publish var = \case
+  EventlogModified ->
+    atomically (tryTakeTMVar var) >>= \case
+      Nothing ->
+        pure ()
+      Just box ->
+        putMVar box EventlogModified
+  EventlogClosed -> do
+    box :: MVar EventlogEvent <-
+      atomically (takeTMVar var)
+    putMVar box EventlogClosed
+
+subscribe :: PubSub -> IO EventlogEvent
+subscribe var = do
+  box :: MVar EventlogEvent <-
+    newEmptyMVar
+  atomically (tryPutTMVar var box) >>= \case
+    False ->
+      error "eventlogEvent: TMVar full"
+    True ->
+      takeMVar box
+
+--------------------------------------------------------------------------------
+-- Batch eventlog parsing
+
+-- | @parse logfile@ parses an eventlog file, assumed to be fully written.
+parse :: FilePath -> Handle -> Stream (Of GHC.Event) IO ()
+parse path =
+  eventStream path GHC.decodeEventLog . SByteString.fromHandle
+
+--------------------------------------------------------------------------------
+-- Common functionality
+
+-- We stitch together a "Decoder Event" (streaming consumer of bytes, producer
+-- of events) and a "Streaming ByteString" (streaming producer of bytes), and
+-- out comes a "Stream Of Event" (streaming producer of events).
+eventStream
+  :: FilePath
+  -> GHC.Decoder GHC.Event
+  -> SByteString IO ()
+  -> Stream (Of GHC.Event) IO ()
+eventStream path decoder bytes =
+  case decoder of
+    GHC.Consume k ->
+      io (SByteString.unconsChunk bytes) >>= \case
+        Nothing ->
+          pure ()
+        Just (chunk, bytes') ->
+          eventStream path (k chunk) bytes'
+    GHC.Produce event decoder' -> do
+      yields (event :> ())
+      eventStream path decoder' bytes
+    GHC.Done _ ->
+      error "Done"
+    GHC.Error _ err ->
+      lift (throw (EventlogParseException err path))

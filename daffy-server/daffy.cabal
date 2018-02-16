@@ -140,6 +140,7 @@ test-suite spec
     , daffy-prelude
     , directory
     , hspec
+    , streaming
     , temporary
     , text
     , typed-process

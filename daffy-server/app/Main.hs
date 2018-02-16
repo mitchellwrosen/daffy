@@ -200,7 +200,7 @@ runCommand conn command = do
 
     Supervisor.spawn
       supervisor
-      (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.parse eventlog)))
+      (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.stream eventlog)))
 #endif
 
   -- Spawn the process.
