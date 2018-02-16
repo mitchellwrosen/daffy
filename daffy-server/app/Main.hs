@@ -110,7 +110,8 @@ httpApp request respond = do
 
   jsFile :: FilePath -> Wai.Response
   jsFile file =
-    Wai.responseFile status200 [(hContentType, "application/json")] file Nothing
+    Wai.responseFile status200 [(hContentType, "application/javascript")] file 
+      Nothing
 
   svgFile :: FilePath -> Wai.Response
   svgFile file =
