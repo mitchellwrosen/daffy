@@ -277,11 +277,10 @@ view model =
                 ++ case model of
                     Initial model_ ->
                         [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
-                            [ div [ class "form-group" ]
-                                [ span [ class "prompt" ] [ text "$" ]
+                            [ div [ class "form-group prompt-group" ]
+                                [ span [ class "ps1" ] [ text "$" ]
                                 , input
-                                    [ class "border"
-                                    , type_ "text"
+                                    [ type_ "text"
                                     , Html.Attributes.autofocus True
                                     , Html.Attributes.value model_.command
                                     , Html.Events.onInput TypeCommand
