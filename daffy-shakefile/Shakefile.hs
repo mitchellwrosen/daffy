@@ -29,7 +29,6 @@ main =
         env <- getEnvironment
         executeFile "bin/Shakefile" False ["watch"] (Just env)
     _ -> do
-      putStrLn "Run, NOT watch"
       run
  where
   run :: IO ()
