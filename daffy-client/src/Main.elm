@@ -278,10 +278,11 @@ view model =
                     Initial model_ ->
                         [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
                             [ div [ class "form-group" ]
-                                [ span [ class "text-lg mr-3" ] [ text "$" ]
+                                [ span [ class "prompt" ] [ text "$" ]
                                 , input
                                     [ class "border"
                                     , type_ "text"
+                                    , Html.Attributes.autofocus True
                                     , Html.Attributes.value model_.command
                                     , Html.Events.onInput TypeCommand
                                     ]
