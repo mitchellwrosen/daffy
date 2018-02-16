@@ -36,10 +36,17 @@ main =
 
 
 type Model
-    = Initial { command : String, stats : Bool } (Array ProgramRun)
-    | RunningProgram ProgramOutput (Array ProgramRun)
+    = Initial ProgramData
+    | RunningProgram ProgramData ProgramOutput
     | MsgParseError String
-    | ExploringRun ProgramRun (Array ProgramRun)
+    | ExploringRun ProgramData ProgramRun
+
+
+type alias ProgramData =
+    { command : String
+    , stats : Bool
+    , runs : Array ProgramRun
+    }
 
 
 type alias ProgramOutput =
@@ -96,33 +103,28 @@ type RunningProgramMsg
 
 init : Model
 init =
-    Initial initCommand Array.empty
-
-
-initCommand : { command : String, stats : Bool }
-initCommand =
-    { command = "../Foo 1000", stats = True }
+    Initial { command = "", stats = True, runs = Array.empty }
 
 
 update : Msg -> Model -> Step Model Msg Never
 update msg model =
     case ( model, msg ) of
-        ( Initial model_ runs, TypeCommand s ) ->
-            Step.to (Initial { model_ | command = s } runs)
+        ( Initial model_, TypeCommand s ) ->
+            Step.to (Initial { model_ | command = s })
 
-        ( Initial model_ runs, ToggleStats b ) ->
-            Step.to (Initial { model_ | stats = b } runs)
+        ( Initial model_, ToggleStats b ) ->
+            Step.to (Initial { model_ | stats = b })
 
-        ( Initial model_ runs, ExploreRun index ) ->
-            case Array.get index runs of
+        ( Initial model_, ExploreRun index ) ->
+            case Array.get index model_.runs of
                 Just programRun ->
-                    Step.to (ExploringRun programRun runs)
+                    Step.to (ExploringRun model_ programRun)
 
                 Nothing ->
                     Step.noop
 
-        ( Initial model_ runs, RunCommand ) ->
-            Step.to (RunningProgram { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing } runs)
+        ( Initial model_, RunCommand ) ->
+            Step.to (RunningProgram model_ { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -134,9 +136,9 @@ update msg model =
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
-        ( RunningProgram runningProgram runs, RunningProgramMsg programRunMsg ) ->
+        ( RunningProgram model runningProgram, RunningProgramMsg programRunMsg ) ->
             stepRunningProgram programRunMsg runningProgram
-                |> Step.map (\x -> RunningProgram x runs)
+                |> Step.map (\x -> RunningProgram model x)
                 |> Step.mapMsg RunningProgramMsg
                 |> Step.onExit
                     (\result ->
@@ -146,11 +148,11 @@ update msg model =
                                     MsgParseError parseErr
 
                                 Ok run ->
-                                    ExploringRun run runs
+                                    ExploringRun model run
                     )
 
-        ( ExploringRun programRun runs, StartNewRun ) ->
-            Step.to (Initial initCommand runs)
+        ( ExploringRun data programRun, StartNewRun ) ->
+            Step.to (Initial { data | runs = Array.push programRun data.runs })
 
         _ ->
             Step.noop
@@ -269,76 +271,82 @@ view model =
                     ]
                 ]
     in
-        div [ class "p-8" ] <|
-            case model of
-                Initial model_ _ ->
-                    [ div []
-                        [ span [ class "text-lg mr-3" ] [ text "Command to Run" ]
-                        , input
-                            [ class "border"
-                            , type_ "text"
-                            , Html.Attributes.value model_.command
-                            , Html.Events.onInput TypeCommand
-                            ]
-                            []
-                        , label
-                            []
-                            [ input
-                                [ type_ "checkbox"
-                                , Html.Events.onCheck ToggleStats
-                                , Html.Attributes.checked model_.stats
+        div [ class "container" ] <|
+            [ h1 [ class "heading" ] [ text "daffy" ]
+            ]
+                ++ case model of
+                    Initial model_ ->
+                        [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
+                            [ div [ class "form-group" ]
+                                [ span [ class "text-lg mr-3" ] [ text "$" ]
+                                , input
+                                    [ class "border"
+                                    , type_ "text"
+                                    , Html.Attributes.value model_.command
+                                    , Html.Events.onInput TypeCommand
+                                    ]
+                                    []
                                 ]
-                                []
-                            , text "Stats"
+                            , div [ class "form-group" ]
+                                [ input [ class "btn", type_ "submit", Html.Attributes.value "Run" ] []
+                                , label
+                                    []
+                                    [ input
+                                        [ type_ "checkbox"
+                                        , Html.Events.onCheck ToggleStats
+                                        , Html.Attributes.checked model_.stats
+                                        ]
+                                        []
+                                    , text "stats"
+                                    ]
+                                ]
                             ]
                         ]
-                    , div [] [ button [ class buttonStyle, type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
-                    ]
 
-                RunningProgram programOutput _ ->
-                    [ viewProgramOutput programOutput
-                    ]
+                    RunningProgram _ programOutput ->
+                        [ viewProgramOutput programOutput
+                        ]
 
-                MsgParseError parseError ->
-                    [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
+                    MsgParseError parseError ->
+                        [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                ExploringRun programRun _ ->
-                    [ button [ class buttonStyle, type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
-                    , viewProgramOutput programRun
-                    , Maybe.map (\path -> object [ Html.Attributes.attribute "data" path ] []) programRun.ticks
-                        |> Maybe.withDefault (text "")
-                    , Maybe.map
-                        (\path -> object [ Html.Attributes.attribute "data" path ] [])
-                        programRun.bytes
-                        |> Maybe.withDefault (text "")
-                    , case programRun.stats of
-                        Just stats ->
-                            div []
-                                [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
-                                    [ LineChart.line Color.purple
-                                        Dots.none
-                                        "Last Run"
-                                        stats.garbageCollections
+                    ExploringRun _ programRun ->
+                        [ button [ class "btn", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                        , viewProgramOutput programRun
+                        , Maybe.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.ticks
+                            |> Maybe.withDefault (text "")
+                        , Maybe.map
+                            (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
+                            programRun.bytes
+                            |> Maybe.withDefault (text "")
+                        , case programRun.stats of
+                            Just stats ->
+                                div []
+                                    [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
+                                        [ LineChart.line Color.purple
+                                            Dots.none
+                                            "Last Run"
+                                            stats.garbageCollections
+                                        ]
+                                    , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
+                                        [ LineChart.line Color.purple
+                                            Dots.none
+                                            "Last Run"
+                                            stats.garbageCollections
+                                        ]
+                                    , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
                                     ]
-                                , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
-                                    [ LineChart.line Color.purple
-                                        Dots.none
-                                        "Last Run"
-                                        stats.garbageCollections
-                                    ]
-                                , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
-                                ]
 
-                        Nothing ->
-                            text ""
-                    ]
+                            Nothing ->
+                                text ""
+                        ]
 
 
 chartConfig : (GCStats -> Float) -> LineChart.Config GCStats msg
 chartConfig y =
     { x = Axis.default 1000 "Time Elapsed" (.totalTime >> .elapsed)
     , y = Axis.default 600 "Bytes" y
-    , container = Container.default "line-chart-1"
+    , container = Container.responsive "line-chart-1"
     , interpolation = Interpolation.default
     , intersection = Intersection.default
     , legends = Legends.default

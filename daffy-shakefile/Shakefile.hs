@@ -78,5 +78,5 @@ rules stack =
   , "daffy-server/codegen/daffy.js" %> \out -> do
       files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
       need ("elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
-      cmd_ ("elm-make daffy-client/src/Main.elm --output=" ++ out)
+      cmd_ ("elm-make --debug daffy-client/src/Main.elm --output=" ++ out)
   ]
