@@ -109,19 +109,20 @@ parseEvents path decoder bytes =
 
 fromHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
 fromHandle waitEvent handle =
-  loop
+  loop False
  where
-  loop :: SByteString IO ()
-  loop = do
+  loop :: Bool -> SByteString IO ()
+  loop done = do
     bytes :: ByteString <-
       io (ByteString.hGetSome handle defaultChunkSize)
     if ByteString.null bytes
-      then do
-        io waitEvent >>= \case
-          EventlogModified ->
-            loop
-          EventlogClosed ->
-            pure ()
+      then
+        unless done $
+          io waitEvent >>= \case
+            EventlogModified ->
+              loop False
+            EventlogClosed ->
+              loop True
       else do
         SByteString.chunk bytes
-        loop
+        loop False
