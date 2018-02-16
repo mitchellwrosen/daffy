@@ -288,7 +288,7 @@ view model =
                                     []
                                 ]
                             , div [ class "form-group" ]
-                                [ input [ class buttonStyle, type_ "submit", Html.Attributes.value "Run" ] []
+                                [ input [ class "btn", type_ "submit", Html.Attributes.value "Run" ] []
                                 , label
                                     []
                                     [ input
@@ -311,12 +311,12 @@ view model =
                         [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
                     ExploringRun _ programRun ->
-                        [ button [ class buttonStyle, type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                        [ button [ class "btn", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
                         , viewProgramOutput programRun
-                        , Maybe.map (\path -> object [ Html.Attributes.attribute "data" path ] []) programRun.ticks
+                        , Maybe.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.ticks
                             |> Maybe.withDefault (text "")
                         , Maybe.map
-                            (\path -> object [ Html.Attributes.attribute "data" path ] [])
+                            (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
                             programRun.bytes
                             |> Maybe.withDefault (text "")
                         , case programRun.stats of
@@ -346,7 +346,7 @@ chartConfig : (GCStats -> Float) -> LineChart.Config GCStats msg
 chartConfig y =
     { x = Axis.default 1000 "Time Elapsed" (.totalTime >> .elapsed)
     , y = Axis.default 600 "Bytes" y
-    , container = Container.default "line-chart-1"
+    , container = Container.responsive "line-chart-1"
     , interpolation = Interpolation.default
     , intersection = Intersection.default
     , legends = Legends.default
