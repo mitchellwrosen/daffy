@@ -1,3 +1,6 @@
 [submodule "daffy-server/submodules/FlameGraph"]
 	path = daffy-server/submodules/FlameGraph
 	url = git@github.com:brendangregg/FlameGraph.git
+[submodule "daffy-client/submodules/line-chart"]
+	path = daffy-client/submodules/line-chart
+	url = https://github.com/terezka/line-charts.git

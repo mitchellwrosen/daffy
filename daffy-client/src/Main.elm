@@ -1,11 +1,26 @@
 module Main exposing (..)
 
+import Array exposing (Array)
+import Color
 import DaffyTypes exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
 import Json.Decode exposing (..)
 import Json.Encode
+import LineChart
+import LineChart.Dots as Dots exposing (Shape)
+import LineChart.Axis as Axis
+import LineChart.Container as Container
+import LineChart.Interpolation as Interpolation
+import LineChart.Legends as Legends
+import LineChart.Events as Events
+import LineChart.Junk as Junk
+import LineChart.Grid as Grid
+import LineChart.Area as Area
+import LineChart.Line as Line
+import LineChart.Dots as Dots
+import LineChart.Axis.Intersection as Intersection
 import Step exposing (Step)
 import WebSocket
 
@@ -21,10 +36,10 @@ main =
 
 
 type Model
-    = Initial { command : String, stats : Bool }
-    | RunningProgram ProgramOutput
+    = Initial { command : String, stats : Bool } (Array ProgramRun)
+    | RunningProgram ProgramOutput (Array ProgramRun)
     | MsgParseError String
-    | ExploringRun ProgramRun
+    | ExploringRun ProgramRun (Array ProgramRun)
 
 
 type alias ProgramOutput =
@@ -55,6 +70,12 @@ type Msg
     | ToggleStats Bool
     | RunCommand
     | RunningProgramMsg RunningProgramMsg
+    | ExploreRun Index
+    | StartNewRun
+
+
+type alias Index =
+    Int
 
 
 type RunExplorationMsg
@@ -75,20 +96,33 @@ type RunningProgramMsg
 
 init : Model
 init =
-    Initial { command = "", stats = False }
+    Initial initCommand Array.empty
+
+
+initCommand : { command : String, stats : Bool }
+initCommand =
+    { command = "../Foo 1000", stats = True }
 
 
 update : Msg -> Model -> Step Model Msg Never
 update msg model =
     case ( model, msg ) of
-        ( Initial model_, TypeCommand s ) ->
-            Step.to (Initial { model_ | command = s })
+        ( Initial model_ runs, TypeCommand s ) ->
+            Step.to (Initial { model_ | command = s } runs)
 
-        ( Initial model_, ToggleStats b ) ->
-            Step.to (Initial { model_ | stats = b })
+        ( Initial model_ runs, ToggleStats b ) ->
+            Step.to (Initial { model_ | stats = b } runs)
 
-        ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
+        ( Initial model_ runs, ExploreRun index ) ->
+            case Array.get index runs of
+                Just programRun ->
+                    Step.to (ExploringRun programRun runs)
+
+                Nothing ->
+                    Step.noop
+
+        ( Initial model_ runs, RunCommand ) ->
+            Step.to (RunningProgram { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing } runs)
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -100,9 +134,9 @@ update msg model =
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
-        ( RunningProgram runningProgram, RunningProgramMsg programRunMsg ) ->
+        ( RunningProgram runningProgram runs, RunningProgramMsg programRunMsg ) ->
             stepRunningProgram programRunMsg runningProgram
-                |> Step.map RunningProgram
+                |> Step.map (\x -> RunningProgram x runs)
                 |> Step.mapMsg RunningProgramMsg
                 |> Step.onExit
                     (\result ->
@@ -112,8 +146,11 @@ update msg model =
                                     MsgParseError parseErr
 
                                 Ok run ->
-                                    ExploringRun run
+                                    ExploringRun run runs
                     )
+
+        ( ExploringRun programRun runs, StartNewRun ) ->
+            Step.to (Initial initCommand runs)
 
         _ ->
             Step.noop
@@ -122,7 +159,7 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     case model of
-        RunningProgram runningProgram ->
+        RunningProgram runningProgram _ ->
             Sub.map RunningProgramMsg <|
                 WebSocket.listen "ws://localhost:8080"
                     (\raw ->
@@ -234,7 +271,7 @@ view model =
     in
         div [ class "p-8" ] <|
             case model of
-                Initial model_ ->
+                Initial model_ _ ->
                     [ div []
                         [ span [ class "text-lg mr-3" ] [ text "Command to Run" ]
                         , input
@@ -255,18 +292,19 @@ view model =
                             , text "Stats"
                             ]
                         ]
-                    , div [] [ button [ class "border shadow rounded px-2 py-1", type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
+                    , div [] [ button [ class buttonStyle, type_ "button", Html.Events.onClick RunCommand ] [ text "Run" ] ]
                     ]
 
-                RunningProgram programOutput ->
+                RunningProgram programOutput _ ->
                     [ viewProgramOutput programOutput
                     ]
 
                 MsgParseError parseError ->
                     [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                ExploringRun programRun ->
-                    [ viewProgramOutput programRun
+                ExploringRun programRun _ ->
+                    [ button [ class buttonStyle, type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                    , viewProgramOutput programRun
                     , Maybe.map (\path -> object [ Html.Attributes.attribute "data" path ] []) programRun.ticks
                         |> Maybe.withDefault (text "")
                     , Maybe.map
@@ -276,13 +314,46 @@ view model =
                     , case programRun.stats of
                         Just stats ->
                             div []
-                                [ h1 [] [ text "Garbage Collections" ]
-                                , viewTable gcTableConfig stats.garbageCollections
+                                [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
+                                    [ LineChart.line Color.purple
+                                        Dots.none
+                                        "Last Run"
+                                        stats.garbageCollections
+                                    ]
+                                , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
+                                    [ LineChart.line Color.purple
+                                        Dots.none
+                                        "Last Run"
+                                        stats.garbageCollections
+                                    ]
+                                , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
                                 ]
 
                         Nothing ->
                             text ""
                     ]
+
+
+chartConfig : (GCStats -> Float) -> LineChart.Config GCStats msg
+chartConfig y =
+    { x = Axis.default 1000 "Time Elapsed" (.totalTime >> .elapsed)
+    , y = Axis.default 600 "Bytes" y
+    , container = Container.default "line-chart-1"
+    , interpolation = Interpolation.default
+    , intersection = Intersection.default
+    , legends = Legends.default
+    , events = Events.default
+    , junk = Junk.default
+    , grid = Grid.default
+    , area = Area.default
+    , line = Line.default
+    , dots = Dots.custom (Dots.full 0)
+    }
+
+
+buttonStyle : String
+buttonStyle =
+    "border shadow rounded px-2 py-1"
 
 
 gcTableConfig : List (Column GCStats)
