@@ -57,6 +57,7 @@ rules stack =
       ]
 
   , "bin/daffy" %> \_ -> do
+      _ <- getEnv "DAFFY_DEV"
       files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
       need ("stack.yaml" : "daffy-server/daffy.cabal" : files)
       stack (cmd_ "stack install --fast --local-bin-path bin daffy:exe:daffy")
