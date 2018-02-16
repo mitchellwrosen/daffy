@@ -17,6 +17,7 @@ import qualified Daffy.Supervisor as Supervisor
 import Data.Aeson (Value, (.=))
 import Data.List (intersperse)
 import Data.Reflection (Given, given, give)
+import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
@@ -39,13 +40,13 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WebSockets
 import qualified Streaming.Prelude as Streaming
 
-workdir :: FilePath
-workdir =
+daffydir :: FilePath
+daffydir =
   ".daffy/"
 
 main :: IO ()
 main = do
-  createDirectoryIfMissing False workdir
+  createDirectoryIfMissing False daffydir
   give V2 main'
 
 main' :: Given V => IO ()
@@ -97,7 +98,7 @@ httpApp request respond = do
         "/daffy.js" ->
           respond (jsFile (data_dir ++ "/codegen/daffy.js"))
         path | ByteString.isSuffixOf ".svg" path ->
-          respond (svgFile (workdir ++ Char8.unpack path))
+          respond (svgFile ("." ++ Char8.unpack path))
         _ ->
           respond notFound
     _ ->
@@ -110,7 +111,7 @@ httpApp request respond = do
 
   jsFile :: FilePath -> Wai.Response
   jsFile file =
-    Wai.responseFile status200 [(hContentType, "application/javascript")] file 
+    Wai.responseFile status200 [(hContentType, "application/javascript")] file
       Nothing
 
   svgFile :: FilePath -> Wai.Response
@@ -157,16 +158,25 @@ recvCommand conn = do
 
 runCommand :: Given V => WebSockets.Connection -> Command -> Managed ()
 runCommand conn command = do
-  -- Use a supervisor to keep track of the threads we spawn, so we can be sure
-  -- they're all done before sending the exit code (which signals there's no
-  -- more data).
-  supervisor :: Supervisor <-
-    Supervisor.new
+  now :: Int <-
+    (round :: Double -> Int) . realToFrac <$> io getPOSIXTime
 
   -- "/foo/bar/baz --oink" -> "baz"
   let progname :: [Char]
       progname =
         takeFileName (head (words (Command.command command)))
+
+  let workdir :: FilePath
+      workdir =
+        daffydir ++ progname ++ "/" ++ show now ++ "/"
+
+  io (createDirectoryIfMissing True workdir)
+
+  -- Use a supervisor to keep track of the threads we spawn, so we can be sure
+  -- they're all done before sending the exit code (which signals there's no
+  -- more data).
+  supervisor :: Supervisor <-
+    Supervisor.new
 
   let eventlog :: FilePath
       eventlog =
@@ -181,7 +191,7 @@ runCommand conn command = do
         workdir ++ progname ++ ".stats"
 
   when (Command.eventlog command)
-    (v2 ("Writing eventlog to " ++ workdir ++ eventlog))
+    (v2 ("Writing eventlog to " ++ daffydir ++ "eventlog"))
 
   when (Command.prof command)
     (v2 ("Writing profile to " ++ proffile))
@@ -205,11 +215,15 @@ runCommand conn command = do
 #endif
 
   -- Spawn the process.
-  v1 ("Running: " ++ Command.render (workdir ++ progname) statsfile command)
+  let rendered :: [Char]
+      rendered =
+       Command.render (workdir ++ progname) statsfile command
+
+  v1 ("Running: " ++ rendered)
   process :: Process () Handle Handle <-
     managed
       (withProcess
-        (shell (Command.render (workdir ++ progname) statsfile command)
+        (shell rendered
           & setStdout createPipe
           & setStderr createPipe))
 
@@ -240,7 +254,7 @@ runCommand conn command = do
   when (Command.eventlog command) $ do
     io (tryAny (GHC.readEventLogFromFile (workdir ++ eventlog))) >>= \case
       Left _ ->
-        v2 (workdir ++ eventlog ++ " not found")
+        v2 (daffydir ++ eventlog ++ " not found")
       Right (Left err) ->
         io (throw (EventlogParseException err (workdir ++ eventlog)))
       Right (Right (GHC.dat -> GHC.Data events)) ->
@@ -287,7 +301,8 @@ runCommand conn command = do
                       ++ "--colors purple"
 
               v2
-                ("Running: " ++ ticksflamegraph ++ " > " ++ workdir ++ tickssvg)
+                ("Running: " ++ ticksflamegraph ++ " > " ++ workdir
+                  ++ tickssvg)
 
               io (withFile (workdir ++ tickssvg) WriteMode $ \h ->
                 runProcess_
@@ -295,7 +310,7 @@ runCommand conn command = do
                     & setStdin (byteStringInput (linesInput ticks_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "ticks-flamegraph" tickssvg
+              sendFlamegraph conn "ticks-flamegraph" (workdir ++ tickssvg)
 
             let bytes_entries :: [Text]
                 bytes_entries =
@@ -313,7 +328,8 @@ runCommand conn command = do
                       ++ "--colors purple"
 
               v2
-                ("Running: " ++ bytesflamegraph ++ " > " ++ workdir ++ bytessvg)
+                ("Running: " ++ bytesflamegraph ++ " > " ++ workdir
+                  ++ bytessvg)
 
               io (withFile (workdir ++ bytessvg) WriteMode $ \h ->
                 runProcess_
@@ -321,7 +337,7 @@ runCommand conn command = do
                     & setStdin (byteStringInput (linesInput bytes_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "bytes-flamegraph" bytessvg
+              sendFlamegraph conn "bytes-flamegraph" (workdir ++ bytessvg)
 
   sendExitCode conn code
 

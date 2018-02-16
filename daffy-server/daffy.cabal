@@ -111,6 +111,7 @@ executable daffy
     , reflection
     , streaming
     , text
+    , time
     , typed-process
     , websockets
     , wai
