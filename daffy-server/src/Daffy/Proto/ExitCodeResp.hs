@@ -2,11 +2,12 @@ module Daffy.Proto.ExitCodeResp
   ( ExitCodeResp(..)
   ) where
 
+import Daffy.Proto.Response
+
 import Data.Aeson (ToJSON)
 
-data ExitCodeResp = ExitCodeResp
-  { type_ :: !Text -- ^ @"exitcode"@.
-  , code :: !Int
-  } deriving (Generic)
+newtype ExitCodeResp
+  = ExitCodeResp Int
+  deriving ToJSON
 
-instance ToJSON ExitCodeResp
+type instance Response ExitCodeResp = "exitcode"

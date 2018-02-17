@@ -2,11 +2,14 @@
 {-# language MagicHash       #-}
 {-# language TemplateHaskell #-}
 
+{-# options_ghc -fno-warn-orphans #-}
+
 import Daffy.Exception
+import Daffy.Proto.ExitCodeResp (ExitCodeResp(ExitCodeResp))
+import Daffy.Proto.FlamegraphResp (FlamegraphResp(FlamegraphResp))
 import Daffy.Proto.OutputResp (OutputResp(OutputResp))
 import Daffy.Proto.Response (Response)
 import Daffy.Proto.RunReq (RunReq(RunReq))
-import Daffy.Stats (Stats)
 import Daffy.Supervisor (Supervisor)
 import Paths_daffy (getDataDir)
 
@@ -221,7 +224,8 @@ handleRunRequest conn request = do
 
     Supervisor.spawn
       supervisor
-      (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.stream eventlog)))
+      (runManaged
+        (Streaming.mapM_ (sendResponse conn) (Eventlog.stream eventlog)))
 #endif
 
   -- Spawn the process.
@@ -295,7 +299,7 @@ handleRunRequest conn request = do
           Left err ->
             io (throw (StatsParseException err statsfile))
           Right stats ->
-            sendStats conn stats
+            sendResponse conn stats
 
   -- Send time and alloc flamegraph paths
   when (RunReq.prof request) $ do
@@ -327,8 +331,8 @@ handleRunRequest conn request = do
                     & setStdin (byteStringInput (linesInput ticks_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "ticks-flamegraph"
-                (daffydir </> rundir </> "ticks.svg")
+              sendResponse conn
+                (FlamegraphResp (pack (daffydir </> rundir </> "ticks.svg")))
 
             let bytes_entries :: [Text]
                 bytes_entries =
@@ -349,10 +353,16 @@ handleRunRequest conn request = do
                     & setStdin (byteStringInput (linesInput bytes_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "bytes-flamegraph"
-                (daffydir </> rundir </> "bytes.svg")
+              sendResponse conn
+                (FlamegraphResp (pack (daffydir </> rundir </> "bytes.svg")))
 
-  sendExitCode conn code
+  sendResponse conn
+    (ExitCodeResp
+      (case code of
+        ExitSuccess ->
+          0
+        ExitFailure n ->
+          n))
 
 streamOutput
   :: (Given V, MonadIO m)
@@ -399,57 +409,6 @@ sendText conn msg = do
   v3 ("SEND " ++ unpack (decodeUtf8 (LByteString.toStrict msg)))
   io (WebSockets.sendTextData conn msg)
 
-sendEvent :: (Given V, MonadIO m) => WebSockets.Connection -> GHC.Event -> m ()
-sendEvent conn event =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("event" :: Text)
-      , "payload" .= show event
-      ]
-
-sendStats :: (Given V, MonadIO m) => WebSockets.Connection -> Stats -> m ()
-sendStats conn stats =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("stats" :: Text)
-      , "payload" .= stats
-      ]
-
-sendFlamegraph
-  :: (Given V, MonadIO m) => WebSockets.Connection -> Text -> FilePath -> m ()
-sendFlamegraph conn name path = do
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= name
-      , "payload" .= path
-      ]
-
-sendExitCode
-  :: (Given V, MonadIO m) => WebSockets.Connection -> ExitCode -> m ()
-sendExitCode conn code =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("exitcode" :: Text)
-      , "payload" .=
-          case code of
-            ExitSuccess ->
-              0
-            ExitFailure n ->
-              n
-      ]
-
 --------------------------------------------------------------------------------
 -- Data files
 
@@ -491,3 +450,26 @@ vv v =
   if given >= v
     then putStrLn
     else io . mempty
+
+--------------------------------------------------------------------------------
+-- Evil orphan instances...
+
+type instance Response GHC.Event = "event"
+
+deriving instance Generic GHC.CapsetType
+deriving instance Generic GHC.Event
+deriving instance Generic GHC.EventInfo
+deriving instance Generic GHC.HeapProfBreakdown
+deriving instance Generic GHC.HeapProfFlags
+deriving instance Generic GHC.KernelThreadId
+deriving instance Generic GHC.MessageTag
+deriving instance Generic GHC.ThreadStopStatus
+
+instance ToJSON GHC.CapsetType
+instance ToJSON GHC.Event
+instance ToJSON GHC.EventInfo
+instance ToJSON GHC.HeapProfBreakdown
+instance ToJSON GHC.HeapProfFlags
+instance ToJSON GHC.KernelThreadId
+instance ToJSON GHC.MessageTag
+instance ToJSON GHC.ThreadStopStatus

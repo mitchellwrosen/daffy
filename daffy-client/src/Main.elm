@@ -54,8 +54,7 @@ type alias ProgramData =
 type alias ProgramOutput =
     { output : List Output
     , stats : Maybe Stats
-    , ticks : Maybe SvgPath
-    , bytes : Maybe SvgPath
+    , flamegraphs : List SvgPath
     }
 
 
@@ -72,8 +71,7 @@ type alias SvgPath =
 type alias ProgramRun =
     { output : List Output
     , exitCode : Int
-    , ticks : Maybe SvgPath
-    , bytes : Maybe SvgPath
+    , flamegraphs : List SvgPath
     , stats : Maybe Stats
     }
 
@@ -104,8 +102,7 @@ type RunningProgramMsg
     | RunStats Stats
     | ExitedWith Int
     | RunMsgParseErr String
-    | GotTicks SvgPath
-    | GotBytes SvgPath
+    | FlamegraphMsg SvgPath
 
 
 init : Model
@@ -137,7 +134,7 @@ update msg model =
                     Step.noop
 
         ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram model_ { output = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
+            Step.to (RunningProgram model_ { output = [], stats = Nothing, flamegraphs = [] })
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -215,13 +212,9 @@ decodeRunMsg =
                             payload decodeStats
                                 |> Json.Decode.map RunStats
 
-                        "ticks-flamegraph" ->
+                        "flamegraph" ->
                             payload string
-                                |> Json.Decode.map GotTicks
-
-                        "bytes-flamegraph" ->
-                            payload string
-                                |> Json.Decode.map GotBytes
+                                |> Json.Decode.map FlamegraphMsg
 
                         _ ->
                             Json.Decode.fail "couldn't parse message from server"
@@ -246,13 +239,13 @@ type alias ParseErr =
 
 
 stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result String ProgramRun)
-stepRunningProgram programRunMsg ({ output, stats, ticks, bytes } as programOutput) =
+stepRunningProgram programRunMsg ({ output, stats, flamegraphs } as programOutput) =
     case programRunMsg of
         OutputMsg line ->
             Step.to { programOutput | output = line :: output }
 
         ExitedWith code ->
-            Step.exit (Ok { output = output, stats = stats, exitCode = code, ticks = ticks, bytes = bytes })
+            Step.exit (Ok { output = output, stats = stats, exitCode = code, flamegraphs = flamegraphs })
 
         RunStats stats ->
             Step.to { programOutput | stats = Just stats }
@@ -260,11 +253,8 @@ stepRunningProgram programRunMsg ({ output, stats, ticks, bytes } as programOutp
         RunMsgParseErr err ->
             Step.exit (Err err)
 
-        GotTicks ticks ->
-            Step.to { programOutput | ticks = Just ticks }
-
-        GotBytes bytes ->
-            Step.to { programOutput | bytes = Just bytes }
+        FlamegraphMsg flamegraph ->
+            Step.to { programOutput | flamegraphs = flamegraph :: flamegraphs }
 
 
 view : Model -> Html Msg
@@ -338,33 +328,29 @@ view model =
                     ExploringRun programData programRun ->
                         [ button [ class "btn btn-back", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
                         , viewProgramOutput programData programRun
-                        , Maybe.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.ticks
-                            |> Maybe.withDefault (text "")
-                        , Maybe.map
-                            (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
-                            programRun.bytes
-                            |> Maybe.withDefault (text "")
-                        , case programRun.stats of
-                            Just stats ->
-                                div []
-                                    [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
-                                        [ LineChart.line (Color.rgb 255 99 71)
-                                            Dots.none
-                                            "Last Run"
-                                            stats.garbageCollections
-                                        ]
-                                    , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
-                                        [ LineChart.line (Color.rgb 255 99 71)
-                                            Dots.none
-                                            "Last Run"
-                                            stats.garbageCollections
-                                        ]
-                                    , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
-                                    ]
-
-                            Nothing ->
-                                text ""
                         ]
+                            ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
+                            ++ [ case programRun.stats of
+                                    Just stats ->
+                                        div []
+                                            [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
+                                                [ LineChart.line (Color.rgb 255 99 71)
+                                                    Dots.none
+                                                    "Last Run"
+                                                    stats.garbageCollections
+                                                ]
+                                            , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
+                                                [ LineChart.line (Color.rgb 255 99 71)
+                                                    Dots.none
+                                                    "Last Run"
+                                                    stats.garbageCollections
+                                                ]
+                                            , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
+                                            ]
+
+                                    Nothing ->
+                                        text ""
+                               ]
 
 
 chartConfig : (GCStats -> Float) -> LineChart.Config GCStats msg

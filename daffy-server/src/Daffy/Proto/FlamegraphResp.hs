@@ -2,11 +2,13 @@ module Daffy.Proto.FlamegraphResp
   ( FlamegraphResp(..)
   ) where
 
+import Daffy.Proto.Response (Response)
+
 import Data.Aeson (ToJSON)
 
-data FlamegraphResp = FlamegraphResp
-  { type_ :: !Text -- ^ @"flamegraph"@
-  , path :: !Text -- ^ Relative filepath to the .svg
-  } deriving (Generic)
+-- | Relative filepath to the flamegraph @.svg@.
+newtype FlamegraphResp
+  = FlamegraphResp Text
+  deriving (ToJSON)
 
-instance ToJSON FlamegraphResp
+type instance Response FlamegraphResp = "flamegraph"

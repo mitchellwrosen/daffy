@@ -2,7 +2,7 @@ module Daffy.Proto.OutputResp
   ( OutputResp(..)
   ) where
 
-import Daffy.Proto.Response
+import Daffy.Proto.Response (Response)
 
 import Data.Aeson (ToJSON)
 

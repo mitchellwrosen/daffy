@@ -13,6 +13,8 @@ module Daffy.Stats
   , parse
   ) where
 
+import Daffy.Proto.Response (Response)
+
 import Data.Aeson (ToJSON)
 import Data.Attoparsec.ByteString.Char8 hiding (parse)
 
@@ -35,6 +37,8 @@ data Stats = Stats
   } deriving (Eq, Generic, Show)
 
 instance ToJSON Stats
+
+type instance Response Stats = "stats"
 
 data GCStats = GCStats
   { bytesAllocated  :: !Int
