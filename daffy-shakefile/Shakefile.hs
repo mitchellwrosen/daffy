@@ -2,6 +2,7 @@
 {-# language RankNTypes #-}
 
 import Control.Concurrent (newChan, readChan)
+import Data.Function ((&))
 import Development.Shake
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
@@ -35,7 +36,7 @@ main =
   run = do
     -- Only run one copy of stack at a time.
     stack <- newResourceIO "stack" 1
-    shakeArgs options (mconcat (rules (withResource stack 1)))
+    shakeArgs options (rules (withResource stack 1))
 
   options :: ShakeOptions
   options =
@@ -47,36 +48,43 @@ main =
       , shakeThreads = 4
       }
 
-rules :: (forall a. Action a -> Action a) -> [Rules ()]
-rules stack =
+rules :: (forall a. Action a -> Action a) -> Rules ()
+rules stack = do
+  action $ do
+    Stdout xs <- cmd "git config -f .gitmodules --get-regexp path$"
+    let submodules = xs & lines & map ((++ "/.git") . (!! 1) . words)
+
     -- The files we want to build, in no particular order.
-  [ want
-      [ "bin/daffy"
-      , "bin/Shakefile"
-      , "daffy-server/codegen/daffy.js"
-      ]
+    need
+      ( "bin/daffy"
+      : "bin/Shakefile"
+      : "daffy-server/codegen/daffy.js"
+      : submodules
+      )
 
-  , "bin/daffy" %> \_ -> do
-      _ <- getEnv "DAFFY_DEV"
-      files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
-      need ("stack.yaml" : "daffy-server/daffy.cabal" : files)
-      stack (cmd_ "stack install --fast --local-bin-path bin daffy:exe:daffy")
+  "*//.git" %> \_ ->
+    cmd_ "git submodule update --init --recursive"
 
-  , "bin/Shakefile" %> \_ -> do
-      need ["daffy-shakefile/daffy-shakefile.cabal", "daffy-shakefile/Shakefile.hs"]
-      stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
+  "bin/daffy" %> \_ -> do
+    _ <- getEnv "DAFFY_DEV"
+    files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
+    need ("stack.yaml" : "daffy-server/daffy.cabal" : files)
+    stack (cmd_ "stack install --fast --local-bin-path bin daffy:exe:daffy")
 
-  , "bin/daffy-elm-codegen" %> \_ -> do
-      files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
-      need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
-      stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
+  "bin/Shakefile" %> \_ -> do
+    need ["daffy-shakefile/daffy-shakefile.cabal", "daffy-shakefile/Shakefile.hs"]
+    stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
 
-  , "daffy-client/codegen/DaffyTypes.elm" %> \out -> do
-      need ["bin/daffy-elm-codegen"]
-      cmd_ (FileStdout out) "bin/daffy-elm-codegen"
+  "bin/daffy-elm-codegen" %> \_ -> do
+    files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
+    need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
+    stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
 
-  , "daffy-server/codegen/daffy.js" %> \out -> do
-      files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
-      need ("elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
-      cmd_ ("elm-make --debug daffy-client/src/Main.elm --output=" ++ out)
-  ]
+  "daffy-client/codegen/DaffyTypes.elm" %> \out -> do
+    need ["bin/daffy-elm-codegen"]
+    cmd_ (FileStdout out) "bin/daffy-elm-codegen"
+
+  "daffy-server/codegen/daffy.js" %> \out -> do
+    files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
+    need ("elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
+    cmd_ ("elm-make --debug daffy-client/src/Main.elm --output=" ++ out)
