@@ -7,7 +7,7 @@ import Data.List (intercalate)
 import qualified Data.ByteString.Lazy as LByteString
 
 data DaffyException
-  = CommandParseException LByteString [Char]
+  = RequestParseException LByteString [Char]
   | EventlogParseException [Char] FilePath
   | InfoParseException LByteString
   | ProfileParseException [Char] FilePath
@@ -17,9 +17,9 @@ data DaffyException
 instance Exception DaffyException where
   displayException :: DaffyException -> [Char]
   displayException = \case
-    CommandParseException bytes err ->
+    RequestParseException bytes err ->
       intercalate "\n"
-        [ "Failed to parse command: " ++ err
+        [ "Failed to parse request: " ++ err
         , unpack (decodeUtf8 (LByteString.toStrict bytes))
         ]
 

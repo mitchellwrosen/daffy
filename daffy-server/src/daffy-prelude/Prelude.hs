@@ -1,6 +1,7 @@
 module Prelude
   ( module X
   , LByteString
+  , List1
   , SByteString
   , hPutStrLn
   , identity
@@ -21,6 +22,7 @@ import Control.Exception.Safe as X
   (catch, catchAny, finally, throw, try, tryAny)
 import Data.ByteString as X (ByteString)
 import Data.Either as X
+import Data.Foldable as X (toList)
 import Data.Function as X ((&), fix)
 import Data.IntMap.Strict as X (IntMap)
 import Data.IORef as X
@@ -40,11 +42,15 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.ByteString.Lazy
 import qualified Data.ByteString.Streaming
+import qualified Data.List.NonEmpty
 import qualified "base" Prelude
 import qualified System.IO
 
 type LByteString
   = Data.ByteString.Lazy.ByteString
+
+type List1
+  = Data.List.NonEmpty.NonEmpty
 
 type SByteString
   = Data.ByteString.Streaming.ByteString

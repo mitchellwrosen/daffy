@@ -1,17 +1,17 @@
 {-# language CPP             #-}
 {-# language TemplateHaskell #-}
 
-import Daffy.Command (Command)
 import Daffy.Exception
+import Daffy.Proto.RunReq (RunReq(RunReq))
 import Daffy.Stats (Stats)
 import Daffy.Supervisor (Supervisor)
 import Paths_daffy (getDataDir)
 
-import qualified Daffy.Command as Command
 #ifdef INOTIFY
 import qualified Daffy.Eventlog as Eventlog
 #endif
 import qualified Daffy.Profile as Profile
+import qualified Daffy.Proto.RunReq as RunReq
 import qualified Daffy.Stats as Stats
 import qualified Daffy.Supervisor as Supervisor
 
@@ -140,8 +140,6 @@ httpApp request respond = do
   notFound =
     Wai.responseLBS status404 [] ""
 
--- WebSockets app: receive one command to run, send back its output, exit code,
--- etc, and then loop.
 wsApp :: Given V => WebSockets.PendingConnection -> IO ()
 wsApp pconn = do
   v1 (show (WebSockets.pendingRequest pconn))
@@ -149,39 +147,36 @@ wsApp pconn = do
   conn :: WebSockets.Connection <-
     WebSockets.acceptRequest pconn
 
-  fix $ \loop -> do
-    command :: Command <-
-      recvCommand conn
+  forever $ do
+    request :: RunReq <-
+      recvRequest conn
 
-    when (null (Command.command command))
-      (throw (CommandParseException (Aeson.encode command) "empty string"))
+    case request of
+      RunReq{} ->
+        runManaged (handleRunRequest conn request)
 
-    runManaged (runCommand conn command)
-
-    loop
-
-recvCommand :: Given V => WebSockets.Connection -> IO Command
-recvCommand conn = do
-  v2 "Waiting for command"
+recvRequest :: Given V => WebSockets.Connection -> IO RunReq
+recvRequest conn = do
+  v2 "Waiting for request"
 
   blob :: LByteString <-
     WebSockets.receiveData conn
 
   case Aeson.eitherDecode blob of
     Left err ->
-      throw (CommandParseException blob err)
+      throw (RequestParseException blob err)
 
     Right request ->
       pure request
 
-runCommand :: Given V => WebSockets.Connection -> Command -> Managed ()
-runCommand conn command = do
+handleRunRequest :: Given V => WebSockets.Connection -> RunReq -> Managed ()
+handleRunRequest conn request = do
   now :: Int <-
     (round :: Double -> Int) . realToFrac <$> io getPOSIXTime
 
   let progname :: [Char]
       progname =
-        takeFileName (head (words (Command.command command)))
+        takeFileName (head (words (toList (RunReq.command request))))
 
   let rundir :: FilePath
       rundir =
@@ -215,7 +210,7 @@ runCommand conn command = do
   -- involves manually recompiling the runtime system. So, blocky-streaming will
   -- have to do, for now.
 #ifdef INOTIFY
-  when (Command.eventlog command) $ do
+  when (RunReq.eventlog request) $ do
     -- Truncate the old eventlog (if any)
     io (withFile eventlog WriteMode (const (pure ())))
 
@@ -228,7 +223,19 @@ runCommand conn command = do
   process :: Process () Handle Handle <- do
     let rendered :: [Char]
         rendered =
-         Command.render (daffydir </> rundir </> progname) statsfile command
+          concat
+            [ toList (RunReq.command request)
+            , " +RTS"
+            , if RunReq.eventlog request
+                then " -l"
+                else ""
+            , if RunReq.prof request
+                then " -pj -po" ++ (daffydir </> rundir </> progname)
+                else ""
+            , if RunReq.stats request
+                then " -S" ++ statsfile
+                else ""
+            ]
 
     v1 ("Running: " ++ rendered)
 
@@ -261,12 +268,12 @@ runCommand conn command = do
       eventlog' =
         daffydir </> rundir </> eventlog
 
-  when (Command.eventlog command)
+  when (RunReq.eventlog request)
     (io (void (tryAny (renameFile eventlog eventlog'))))
 
   -- If we didn't stream the eventlog, send all of the events out now.
 #ifndef INOTIFY
-  when (Command.eventlog command) $ do
+  when (RunReq.eventlog request) $ do
     io (tryAny (GHC.readEventLogFromFile eventlog')) >>= \case
       Left _ ->
         v2 (eventlog' ++ " not found")
@@ -277,7 +284,7 @@ runCommand conn command = do
 #endif
 
   -- Send a big hunk of stats.
-  when (Command.stats command) $
+  when (RunReq.stats request) $
     io (tryAny (Text.readFile statsfile)) >>= \case
       Left ex ->
         v2 (statsfile ++ " not found: " ++ show ex)
@@ -291,7 +298,7 @@ runCommand conn command = do
             sendStats conn stats
 
   -- Send time and alloc flamegraph paths
-  when (Command.prof command) $ do
+  when (RunReq.prof request) $ do
     io (tryAny (LByteString.readFile proffile)) >>= \case
       Left ex ->
         v2 (proffile ++ " not found: " ++ show ex)
