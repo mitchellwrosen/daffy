@@ -216,6 +216,9 @@ runCommand conn command = do
   -- have to do, for now.
 #ifdef INOTIFY
   when (Command.eventlog command) $ do
+    -- Truncate the old eventlog (if any)
+    io (withFile eventlog WriteMode (const (pure ())))
+
     Supervisor.spawn
       supervisor
       (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.stream eventlog)))

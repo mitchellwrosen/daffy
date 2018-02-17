@@ -45,6 +45,8 @@ type Model
 type alias ProgramData =
     { command : String
     , stats : Bool
+    , prof : Bool
+    , eventlog : Bool
     , runs : Array ProgramRun
     }
 
@@ -75,6 +77,8 @@ type alias ProgramRun =
 type Msg
     = TypeCommand String
     | ToggleStats Bool
+    | ToggleProf Bool
+    | ToggleEventlog Bool
     | RunCommand
     | RunningProgramMsg RunningProgramMsg
     | ExploreRun Index
@@ -103,7 +107,7 @@ type RunningProgramMsg
 
 init : Model
 init =
-    Initial { command = "", stats = True, runs = Array.empty }
+    Initial { command = "", stats = True, prof = False, eventlog = False, runs = Array.empty }
 
 
 update : Msg -> Model -> Step Model Msg Never
@@ -114,6 +118,12 @@ update msg model =
 
         ( Initial model_, ToggleStats b ) ->
             Step.to (Initial { model_ | stats = b })
+
+        ( Initial model_, ToggleProf b ) ->
+            Step.to (Initial { model_ | prof = b })
+
+        ( Initial model_, ToggleEventlog b ) ->
+            Step.to (Initial { model_ | eventlog = b })
 
         ( Initial model_, ExploreRun index ) ->
             case Array.get index model_.runs of
@@ -128,8 +138,8 @@ update msg model =
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
-                     , ( "eventlog", Json.Encode.bool False )
-                     , ( "prof", Json.Encode.bool True )
+                     , ( "prof", Json.Encode.bool model_.prof )
+                     , ( "eventlog", Json.Encode.bool model_.eventlog )
                      ]
                         |> Json.Encode.object
                         |> Json.Encode.encode 0
@@ -155,7 +165,7 @@ update msg model =
             Step.to (Initial { data | runs = Array.push programRun data.runs })
 
         _ ->
-            Step.noop
+            Debug.crash "Invalid message"
 
 
 subscriptions : Model -> Sub Msg
@@ -300,6 +310,26 @@ view model =
                                         []
                                     , text "stats"
                                     ]
+                                , label
+                                    []
+                                    [ input
+                                        [ type_ "checkbox"
+                                        , Html.Events.onCheck ToggleProf
+                                        , Html.Attributes.checked model_.prof
+                                        ]
+                                        []
+                                    , text "profile"
+                                    ]
+                                , label
+                                    []
+                                    [ input
+                                        [ type_ "checkbox"
+                                        , Html.Events.onCheck ToggleEventlog
+                                        , Html.Attributes.checked model_.eventlog
+                                        ]
+                                        []
+                                    , text "eventlog"
+                                    ]
                                 ]
                             ]
                         ]
@@ -409,74 +439,3 @@ viewTable columns elements =
                 )
             |> tbody []
         ]
-
-
-
--- Geting Standart Out And Error and exit -> onExit waitingForStats -> Done
-{-
-   "type" = "stdout" | "stderr" | "exitcode" | "stats"
-   "payload" = (stdout|stderr -> String) ("exitcode" -> Int) (stats -> Maybe Stats)
-
--}
-
-
-testStats : Stats
-testStats =
-    { garbageCollections =
-        -- each GC creates an entry
-        [ { bytesAllocated = 0
-          , bytesCopied = 0
-          , liveBytes = 0
-          , time = { user = 0.0, elapsed = 0.0 }
-          , totalTime = { user = 0.0, elapsed = 0.0 }
-          , pageFaults = 0
-          , totalPageFaults = 0
-          , generation = 0 -- might want to filter by generation
-          }
-        , { bytesAllocated = 0
-          , bytesCopied = 0
-          , liveBytes = 0
-          , time = { user = 0.0, elapsed = 0.0 }
-          , totalTime = { user = 0.0, elapsed = 0.0 }
-          , pageFaults = 0
-          , totalPageFaults = 0
-          , generation = 1
-          }
-        ]
-    , generationSummaries =
-        [ { parallel = 0
-          , averagePauseTime = 0.0
-          , maxPauseTime = 0.0
-          }
-        ]
-    , parallelGarbageCollection =
-        Just
-            { parallel = 0.0
-            , serial = 0.0
-            , perfect = 0.0
-            }
-    , tasks =
-        Just
-            { tasks = 0
-            , bound = 0
-            , peakWorkers = 0
-            , totalWorkers = 0
-            }
-    , sparks =
-        Just
-            { sparks = 0
-            , converted = 0
-            , overflowed = 0
-            , dud = 0
-            , garbageCollected = 0
-            , fizzled = 0
-            }
-    , runtimeInitTime = { user = 0.0, elapsed = 0.0 }
-    , mutatorTime = { user = 0.0, elapsed = 0.0 }
-    , garbageCollectionTime = { user = 0.0, elapsed = 0.0 }
-    , retainerProfilingTime = Just { user = 0.0, elapsed = 0.0 }
-    , otherProfilingTime = Just { user = 0.0, elapsed = 0.0 }
-    , runtimeShutdownTime = { user = 0.0, elapsed = 0.0 }
-    , totalTime = { user = 0.0, elapsed = 0.0 }
-    , percentGarbageCollectionTime = Just { user = 0.0, elapsed = 0.0 }
-    }
