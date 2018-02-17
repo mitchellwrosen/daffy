@@ -52,11 +52,16 @@ type alias ProgramData =
 
 
 type alias ProgramOutput =
-    { stderr : List String
-    , stdout : List String
+    { output : List Output
     , stats : Maybe Stats
     , ticks : Maybe SvgPath
     , bytes : Maybe SvgPath
+    }
+
+
+type alias Output =
+    { line : String
+    , stdout : Bool
     }
 
 
@@ -65,8 +70,7 @@ type alias SvgPath =
 
 
 type alias ProgramRun =
-    { stdout : List String
-    , stderr : List String
+    { output : List Output
     , exitCode : Int
     , ticks : Maybe SvgPath
     , bytes : Maybe SvgPath
@@ -96,8 +100,7 @@ type RunExplorationMsg
 
 
 type RunningProgramMsg
-    = StdOutLine String
-    | StdErrLine String
+    = OutputMsg Output
     | RunStats Stats
     | ExitedWith Int
     | RunMsgParseErr String
@@ -134,7 +137,7 @@ update msg model =
                     Step.noop
 
         ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram model_ { stderr = [], stdout = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
+            Step.to (RunningProgram model_ { output = [], stats = Nothing, ticks = Nothing, bytes = Nothing })
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -197,13 +200,9 @@ decodeRunMsg =
             |> Json.Decode.andThen
                 (\type_ ->
                     case type_ of
-                        "stdout" ->
-                            payload string
-                                |> Json.Decode.map StdOutLine
-
-                        "stderr" ->
-                            payload string
-                                |> Json.Decode.map StdErrLine
+                        "output" ->
+                            payload decodeOutput
+                                |> Json.Decode.map OutputMsg
 
                         "event" ->
                             payload (fail "gotta implement event")
@@ -229,6 +228,11 @@ decodeRunMsg =
                 )
 
 
+decodeOutput : Decoder Output
+decodeOutput =
+    map2 Output (field "line" string) (field "stdout" bool)
+
+
 type alias ParseErr =
     String
 
@@ -242,16 +246,13 @@ type alias ParseErr =
 
 
 stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result String ProgramRun)
-stepRunningProgram programRunMsg ({ stdout, stderr, stats, ticks, bytes } as programOutput) =
+stepRunningProgram programRunMsg ({ output, stats, ticks, bytes } as programOutput) =
     case programRunMsg of
-        StdOutLine line ->
-            Step.to { programOutput | stdout = line :: stdout }
-
-        StdErrLine line ->
-            Step.to { programOutput | stderr = line :: stderr }
+        OutputMsg line ->
+            Step.to { programOutput | output = line :: output }
 
         ExitedWith code ->
-            Step.exit (Ok { stdout = stdout, stderr = stderr, stats = stats, exitCode = code, ticks = ticks, bytes = bytes })
+            Step.exit (Ok { output = output, stats = stats, exitCode = code, ticks = ticks, bytes = bytes })
 
         RunStats stats ->
             Step.to { programOutput | stats = Just stats }
@@ -269,18 +270,11 @@ stepRunningProgram programRunMsg ({ stdout, stderr, stats, ticks, bytes } as pro
 view : Model -> Html Msg
 view model =
     let
-        viewProgramOutput programData { stdout, stderr } =
-            let
-                whatMatters =
-                    if (List.length stderr) > 0 then
-                        stderr
-                    else
-                        stdout
-            in
-                div [ class "command-form" ]
-                    [ span [ class "ps1" ] [ text <| "$ " ++ programData.command ]
-                    , p [] [ text <| String.join "\n" (List.reverse whatMatters) ]
-                    ]
+        viewProgramOutput programData { output } =
+            div [ class "command-form" ]
+                [ span [ class "ps1" ] [ text <| "$ " ++ programData.command ]
+                , p [] [ text <| String.join "\n" (List.reverse (List.map .line output)) ]
+                ]
     in
         div [ class "container" ] <|
             [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ]

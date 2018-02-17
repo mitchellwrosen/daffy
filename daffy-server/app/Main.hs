@@ -1,7 +1,10 @@
 {-# language CPP             #-}
+{-# language MagicHash       #-}
 {-# language TemplateHaskell #-}
 
 import Daffy.Exception
+import Daffy.Proto.OutputResp (OutputResp(OutputResp))
+import Daffy.Proto.Response (Response)
 import Daffy.Proto.RunReq (RunReq(RunReq))
 import Daffy.Stats (Stats)
 import Daffy.Supervisor (Supervisor)
@@ -12,13 +15,15 @@ import qualified Daffy.Eventlog as Eventlog
 #endif
 import qualified Daffy.Profile as Profile
 import qualified Daffy.Proto.RunReq as RunReq
+import qualified Daffy.Proto.OutputResp as OutputResp
 import qualified Daffy.Stats as Stats
 import qualified Daffy.Supervisor as Supervisor
 
-import Data.Aeson (Value, (.=))
+import Data.Aeson (ToJSON, Value, (.=))
 import Data.List (intersperse)
 import Data.Reflection (Given, given, give)
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import GHC.Prim (proxy#)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
@@ -246,12 +251,7 @@ handleRunRequest conn request = do
           & setStderr createPipe))
 
   -- Asynchronously stream stdout and stderr.
-  Supervisor.spawn supervisor
-    (forever (ByteString.hGetLine (getStdout process) >>= sendStdout conn)
-      `catchAny` \_ -> pure ())
-  Supervisor.spawn supervisor
-    (forever (ByteString.hGetLine (getStderr process) >>= sendStderr conn)
-      `catchAny` \_ -> pure ())
+  streamOutput conn supervisor process
 
   -- Wait for the process to terminate.
   code :: ExitCode <-
@@ -354,6 +354,25 @@ handleRunRequest conn request = do
 
   sendExitCode conn code
 
+streamOutput
+  :: (Given V, MonadIO m)
+  => WebSockets.Connection -> Supervisor -> Process () Handle Handle -> m ()
+streamOutput conn supervisor process = do
+  Supervisor.spawn supervisor
+    (worker (getStdout process) True `catchAny` \_ -> pure ())
+  Supervisor.spawn supervisor
+    (worker (getStderr process) False `catchAny` \_ -> pure ())
+ where
+  worker :: Handle -> Bool -> IO a
+  worker handle out =
+    forever $ do
+      line :: Text <-
+        Text.hGetLine handle
+      sendResponse conn OutputResp
+        { OutputResp.line = line
+        , OutputResp.stdout = out
+        }
+
 linesInput :: [Text] -> LByteString
 linesInput =
   LByteString.fromChunks . intersperse (Char8.singleton '\n') . map encodeUtf8
@@ -361,32 +380,24 @@ linesInput =
 --------------------------------------------------------------------------------
 -- Send blobby blobs
 
+sendResponse
+  :: forall a m.
+     (Given V, KnownSymbol (Response a), ToJSON a, MonadIO m)
+  => WebSockets.Connection -> a -> m ()
+sendResponse conn response =
+  sendText conn (Aeson.encode blob)
+ where
+  blob :: Value
+  blob =
+    Aeson.object
+      [ "type" .= symbolVal' @(Response a) proxy#
+      , "payload" .= response
+      ]
+
 sendText :: (Given V, MonadIO m) => WebSockets.Connection -> LByteString -> m ()
 sendText conn msg = do
   v3 ("SEND " ++ unpack (decodeUtf8 (LByteString.toStrict msg)))
   io (WebSockets.sendTextData conn msg)
-
-sendStdout :: Given V => WebSockets.Connection -> ByteString -> IO ()
-sendStdout conn line =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("stdout" :: Text)
-      , "payload" .= decodeUtf8 line
-      ]
-
-sendStderr :: Given V => WebSockets.Connection -> ByteString -> IO ()
-sendStderr conn line =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= ("stderr" :: Text)
-      , "payload" .= decodeUtf8 line
-      ]
 
 sendEvent :: (Given V, MonadIO m) => WebSockets.Connection -> GHC.Event -> m ()
 sendEvent conn event =
