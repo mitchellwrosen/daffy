@@ -116,7 +116,7 @@ httpApp request respond = do
         "/daffy.js" ->
           respond (jsFile (data_dir </> "codegen" </> "daffy.js"))
         path | ByteString.isSuffixOf ".svg" path ->
-          respond (svgFile (daffydir </> Char8.unpack path))
+          respond (svgFile (daffydir ++ Char8.unpack path))
         _ ->
           respond notFound
     _ ->
