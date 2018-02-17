@@ -116,7 +116,7 @@ httpApp request respond = do
         "/daffy.js" ->
           respond (jsFile (data_dir </> "codegen" </> "daffy.js"))
         path | ByteString.isSuffixOf ".svg" path ->
-          respond (svgFile (daffydir ++ Char8.unpack path))
+          respond (svgFile ("." ++ Char8.unpack path))
         _ ->
           respond notFound
     _ ->
@@ -327,7 +327,8 @@ handleRunRequest conn request = do
                     & setStdin (byteStringInput (linesInput ticks_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "ticks-flamegraph" (rundir </> "ticks.svg")
+              sendFlamegraph conn "ticks-flamegraph"
+                (daffydir </> rundir </> "ticks.svg")
 
             let bytes_entries :: [Text]
                 bytes_entries =
@@ -348,7 +349,8 @@ handleRunRequest conn request = do
                     & setStdin (byteStringInput (linesInput bytes_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "bytes-flamegraph" (rundir </> "bytes.svg")
+              sendFlamegraph conn "bytes-flamegraph"
+                (daffydir </> rundir </> "bytes.svg")
 
   sendExitCode conn code
 
