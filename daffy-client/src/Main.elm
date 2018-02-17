@@ -52,7 +52,7 @@ type alias ProgramData =
 
 
 type alias ProgramOutput =
-    { output : List Output
+    { output : Array Output
     , stats : Maybe Stats
     , flamegraphs : List SvgPath
     }
@@ -69,7 +69,7 @@ type alias SvgPath =
 
 
 type alias ProgramRun =
-    { output : List Output
+    { output : Array Output
     , exitCode : Int
     , flamegraphs : List SvgPath
     , stats : Maybe Stats
@@ -134,7 +134,7 @@ update msg model =
                     Step.noop
 
         ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram model_ { output = [], stats = Nothing, flamegraphs = [] })
+            Step.to (RunningProgram model_ { output = Array.empty, stats = Nothing, flamegraphs = [] })
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model_.command )
                      , ( "stats", Json.Encode.bool model_.stats )
@@ -230,19 +230,11 @@ type alias ParseErr =
     String
 
 
-
--- type Step model msg output =
---     To model (Cmd msg)
---     | Noop
---     | Output output
--- stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result ParseErr ProgramRun)
-
-
 stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result String ProgramRun)
 stepRunningProgram programRunMsg ({ output, stats, flamegraphs } as programOutput) =
     case programRunMsg of
         OutputMsg line ->
-            Step.to { programOutput | output = line :: output }
+            Step.to { programOutput | output = Array.push line output }
 
         ExitedWith code ->
             Step.exit (Ok { output = output, stats = stats, exitCode = code, flamegraphs = flamegraphs })
@@ -262,9 +254,12 @@ view model =
     let
         viewProgramOutput programData { output } =
             div [ class "command-form" ]
-                [ span [ class "ps1" ] [ text <| "$ " ++ programData.command ]
-                , p [] [ text <| String.join "\n" (List.reverse (List.map .line output)) ]
-                ]
+                (span [ class "ps1" ] [ text <| "$ " ++ programData.command ]
+                    :: (output
+                            |> Array.toList
+                            |> List.map (p [] << List.singleton << text << .line)
+                       )
+                )
     in
         div [ class "container" ] <|
             [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ]
