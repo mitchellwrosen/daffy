@@ -69,7 +69,7 @@ rules stack = do
     _ <- getEnv "DAFFY_DEV"
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
     need ("stack.yaml" : "daffy-server/daffy.cabal" : files)
-    stack (cmd_ "stack install --fast --local-bin-path bin daffy:exe:daffy")
+    stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
 
   "bin/Shakefile" %> \_ -> do
     need ["daffy-shakefile/daffy-shakefile.cabal", "daffy-shakefile/Shakefile.hs"]

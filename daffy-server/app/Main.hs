@@ -1,4 +1,5 @@
-{-# language CPP #-}
+{-# language CPP             #-}
+{-# language TemplateHaskell #-}
 
 import Daffy.Command (Command)
 import Daffy.Exception
@@ -21,9 +22,9 @@ import Data.Time.Clock.POSIX (getPOSIXTime)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
-import System.Directory (createDirectoryIfMissing, renameFile)
-import System.Environment (lookupEnv)
-import System.FilePath (takeFileName)
+import System.Directory
+  (createDirectoryIfMissing, getCurrentDirectory, renameFile)
+import System.FilePath ((</>), (<.>), takeFileName)
 import System.IO (IOMode(WriteMode))
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process.Typed
@@ -35,6 +36,8 @@ import qualified Data.ByteString.Lazy as LByteString
 import qualified Data.Text as Text (dropWhile)
 import qualified Data.Text.IO as Text
 import qualified GHC.RTS.Events as GHC
+import qualified Language.Haskell.TH as TH
+import qualified Language.Haskell.TH.Syntax as TH
 import qualified Network.Wai as Wai
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.WebSockets as WebSockets
@@ -42,7 +45,15 @@ import qualified Streaming.Prelude as Streaming
 
 daffydir :: FilePath
 daffydir =
-  ".daffy/"
+  ".daffy"
+
+development :: Bool
+development =
+#ifdef DEVELOPMENT
+  True
+#else
+  False
+#endif
 
 main :: IO ()
 main = do
@@ -51,9 +62,16 @@ main = do
 
 main' :: Given V => IO ()
 main' = do
-  v0 "Running on http://localhost:8080"
+  if development
+    then do
+      v0 "Running on http://localhost:8080 in development mode"
+      v0 ("Data dir: " ++ data_dir)
+    else
+      v0 "Running on http://localhost:8080"
+
   Warp.runSettings settings
     (websocketsOr WebSockets.defaultConnectionOptions wsApp (log httpApp))
+
  where
   settings :: Warp.Settings
   settings =
@@ -94,11 +112,11 @@ httpApp request respond = do
     "GET" ->
       case Wai.rawPathInfo request of
         "/" -> do
-          respond (htmlFile (data_dir ++ "/static/index.html"))
+          respond (htmlFile (data_dir </> "static" </> "index.html"))
         "/daffy.js" ->
-          respond (jsFile (data_dir ++ "/codegen/daffy.js"))
+          respond (jsFile (data_dir </> "codegen" </> "daffy.js"))
         path | ByteString.isSuffixOf ".svg" path ->
-          respond (svgFile ("." ++ Char8.unpack path))
+          respond (svgFile (daffydir </> Char8.unpack path))
         _ ->
           respond notFound
     _ ->
@@ -161,16 +179,17 @@ runCommand conn command = do
   now :: Int <-
     (round :: Double -> Int) . realToFrac <$> io getPOSIXTime
 
-  -- "/foo/bar/baz --oink" -> "baz"
   let progname :: [Char]
       progname =
         takeFileName (head (words (Command.command command)))
 
-  let workdir :: FilePath
-      workdir =
-        daffydir ++ progname ++ "/" ++ show now ++ "/"
+  let rundir :: FilePath
+      rundir =
+        progname </> show now
 
-  io (createDirectoryIfMissing True workdir)
+  v2 ("Run dir: " ++ rundir)
+
+  io (createDirectoryIfMissing True (daffydir </> rundir))
 
   -- Use a supervisor to keep track of the threads we spawn, so we can be sure
   -- they're all done before sending the exit code (which signals there's no
@@ -180,24 +199,15 @@ runCommand conn command = do
 
   let eventlog :: FilePath
       eventlog =
-        progname ++ ".eventlog"
+        progname <.> "eventlog"
 
   let proffile :: FilePath
       proffile =
-        workdir ++ progname ++ ".prof"
+        daffydir </> rundir </> progname <.> "prof"
 
   let statsfile :: FilePath
       statsfile =
-        workdir ++ progname ++ ".stats"
-
-  when (Command.eventlog command)
-    (v2 ("Writing eventlog to " ++ daffydir ++ "eventlog"))
-
-  when (Command.prof command)
-    (v2 ("Writing profile to " ++ proffile))
-
-  when (Command.stats command)
-    (v2 ("Writing stats to " ++ statsfile))
+        daffydir </> rundir </> "stats"
 
   -- If Linux, incrementally parse the eventlog as it's written to by GHC. Turns
   -- out this doesn't exactly stream the eventlog in real time, as it's only
@@ -206,21 +216,19 @@ runCommand conn command = do
   -- have to do, for now.
 #ifdef INOTIFY
   when (Command.eventlog command) $ do
-    -- Truncate the old eventlog (if any)
-    io (withFile eventlog WriteMode (const (pure ())))
-
     Supervisor.spawn
       supervisor
       (runManaged (Streaming.mapM_ (sendEvent conn) (Eventlog.stream eventlog)))
 #endif
 
   -- Spawn the process.
-  let rendered :: [Char]
-      rendered =
-       Command.render (workdir ++ progname) statsfile command
+  process :: Process () Handle Handle <- do
+    let rendered :: [Char]
+        rendered =
+         Command.render (daffydir </> rundir </> progname) statsfile command
 
-  v1 ("Running: " ++ rendered)
-  process :: Process () Handle Handle <-
+    v1 ("Running: " ++ rendered)
+
     managed
       (withProcess
         (shell rendered
@@ -246,17 +254,21 @@ runCommand conn command = do
 
   -- We can't have GHC write to a custom eventlog destination, so just crudely
   -- move it after the process is done.
+  let eventlog' :: FilePath
+      eventlog' =
+        daffydir </> rundir </> eventlog
+
   when (Command.eventlog command)
-    (io (void (tryAny (renameFile eventlog (workdir ++ eventlog)))))
+    (io (void (tryAny (renameFile eventlog eventlog'))))
 
   -- If we didn't stream the eventlog, send all of the events out now.
 #ifndef INOTIFY
   when (Command.eventlog command) $ do
-    io (tryAny (GHC.readEventLogFromFile (workdir ++ eventlog))) >>= \case
+    io (tryAny (GHC.readEventLogFromFile eventlog')) >>= \case
       Left _ ->
-        v2 (daffydir ++ eventlog ++ " not found")
+        v2 (eventlog' ++ " not found")
       Right (Left err) ->
-        io (throw (EventlogParseException err (workdir ++ eventlog)))
+        io (throw (EventlogParseException err eventlog'))
       Right (Right (GHC.dat -> GHC.Data events)) ->
         forM_ events (sendEvent conn)
 #endif
@@ -264,8 +276,8 @@ runCommand conn command = do
   -- Send a big hunk of stats.
   when (Command.stats command) $
     io (tryAny (Text.readFile statsfile)) >>= \case
-      Left _ ->
-        v2 (statsfile ++ " not found")
+      Left ex ->
+        v2 (statsfile ++ " not found: " ++ show ex)
       Right bytes ->
         -- Drop a line, because when directing -S output to a file, the command
         -- invocation is written at the top.
@@ -284,60 +296,49 @@ runCommand conn command = do
         case Profile.parse bytes of
           Left err ->
             io (throw (ProfileParseException err proffile))
+
           Right prof -> do
             let ticks_entries :: [Text]
                 ticks_entries =
                   Profile.ticksFlamegraph prof
 
             unless (null ticks_entries) $ do
-              let tickssvg :: FilePath
-                  tickssvg =
-                    progname ++ "-ticks.svg"
+              io (withFile (daffydir </> rundir </> "ticks.svg") WriteMode $ \h -> do
+                let cmd :: [Char]
+                    cmd =
+                      "perl " ++ flamegraph ++ " --title '" ++ progname
+                        ++ " (ticks)' " ++ "--countname ticks "
+                        ++ "--nametype 'Cost center:' " ++ "--colors hot"
 
-              let ticksflamegraph :: [Char]
-                  ticksflamegraph =
-                    flamegraph ++ " --title '" ++ progname ++ " (ticks)' "
-                      ++ "--countname ticks " ++ "--nametype 'Cost center:' "
-                      ++ "--colors hot"
+                v2 ("Running: " ++ cmd)
 
-              v2
-                ("Running: " ++ ticksflamegraph ++ " > " ++ workdir
-                  ++ tickssvg)
-
-              io (withFile (workdir ++ tickssvg) WriteMode $ \h ->
                 runProcess_
-                  (shell ticksflamegraph
+                  (shell cmd
                     & setStdin (byteStringInput (linesInput ticks_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "ticks-flamegraph" (workdir ++ tickssvg)
+              sendFlamegraph conn "ticks-flamegraph" (rundir </> "ticks.svg")
 
             let bytes_entries :: [Text]
                 bytes_entries =
                   Profile.allocFlamegraph prof
 
             unless (null bytes_entries) $ do
-              let bytessvg :: FilePath
-                  bytessvg =
-                    progname ++ "-bytes.svg"
+              io (withFile (daffydir </> rundir </> "bytes.svg") WriteMode $ \h -> do
+                let cmd :: [Char]
+                    cmd =
+                      "perl " ++ flamegraph ++ " --title '" ++ progname
+                        ++ " (bytes)' " ++ "--countname bytes "
+                        ++ "--nametype 'Cost center:' " ++ "--colors hot"
 
-              let bytesflamegraph :: [Char]
-                  bytesflamegraph =
-                    flamegraph ++ " --title '" ++ progname ++ " (bytes)' "
-                      ++ "--countname bytes " ++ "--nametype 'Cost center:' "
-                      ++ "--colors hot"
+                v2 ("Running: " ++ cmd)
 
-              v2
-                ("Running: " ++ bytesflamegraph ++ " > " ++ workdir
-                  ++ bytessvg)
-
-              io (withFile (workdir ++ bytessvg) WriteMode $ \h ->
                 runProcess_
-                  (shell bytesflamegraph
+                  (shell cmd
                     & setStdin (byteStringInput (linesInput bytes_entries))
                     & setStdout (useHandleClose h)))
 
-              sendFlamegraph conn "bytes-flamegraph" (workdir ++ bytessvg)
+              sendFlamegraph conn "bytes-flamegraph" (rundir </> "bytes.svg")
 
   sendExitCode conn code
 
@@ -431,17 +432,16 @@ sendExitCode conn code =
 
 data_dir :: FilePath
 data_dir =
-  unsafePerformIO $
-    lookupEnv "DAFFY_DEV" >>= \case
-      Nothing ->
-        getDataDir
-      Just _ ->
-        pure "./daffy-server"
+  if development
+    then
+      $(TH.runIO getCurrentDirectory >>= TH.lift)
+    else
+      unsafePerformIO getDataDir
 {-# NOINLINE data_dir #-}
 
 flamegraph :: FilePath
 flamegraph =
-  "perl " ++ data_dir ++ "/submodules/FlameGraph/flamegraph.pl"
+  data_dir </> "submodules" </> "FlameGraph" </> "flamegraph.pl"
 
 --------------------------------------------------------------------------------
 -- Verbosity
