@@ -1,2 +1,0 @@
-packages: daffy-elm-codegen, daffy-server
-with-compiler: ghc-8.2.2
