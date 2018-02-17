@@ -21,7 +21,13 @@ import LineChart.Area as Area
 import LineChart.Line as Line
 import LineChart.Dots as Dots
 import LineChart.Axis.Intersection as Intersection
+import List.Extra as List
+import Maybe.Extra as Maybe
 import Step exposing (Step)
+import Svg exposing (Svg)
+import Svg.Attributes
+import Visualization.Axis as VAxis
+import Visualization.Scale as VScale exposing (ContinuousScale)
 import WebSocket
 
 
@@ -340,6 +346,7 @@ view model =
                                                     "Last Run"
                                                     stats.garbageCollections
                                                 ]
+                                            , renderLiveBytesSVG stats.garbageCollections
                                             , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
                                             ]
 
@@ -414,3 +421,100 @@ viewTable columns elements =
                 )
             |> tbody []
         ]
+
+renderLiveBytesSVG : List GCStats -> Svg msg
+renderLiveBytesSVG stats =
+    let
+        attributes : List (Attribute msg)
+        attributes =
+            [ Svg.Attributes.width "800px"
+            , Svg.Attributes.height "600px"
+            ]
+
+        elements : List (Svg msg)
+        elements =
+          let
+              getx : GCStats -> Float
+              getx =
+                .totalTime >> .elapsed
+
+              gety : GCStats -> Float
+              gety =
+                .liveBytes >> toFloat
+
+              xscale : ContinuousScale
+              xscale =
+                let xmax : Float
+                    xmax =
+                      stats
+                        |> List.last
+                        |> Maybe.unwrap 0 getx
+                in
+                  VScale.linear (0, xmax) (0, 800)
+
+              yscale : ContinuousScale
+              yscale =
+                let ymin : Float
+                    ymin =
+                      stats
+                        |> List.map .liveBytes
+                        |> List.minimum
+                        |> Maybe.unwrap 0 toFloat
+
+                    ymax : Float
+                    ymax =
+                      stats
+                        |> List.map .liveBytes
+                        |> List.maximum
+                        |> Maybe.unwrap 0 toFloat
+                in
+                  VScale.linear (ymin, ymax) (600, 0)
+
+              xaxis : Svg msg
+              xaxis =
+                VAxis.axis
+                  { orientation = VAxis.Bottom
+                  , ticks = Nothing
+                  , tickFormat = Nothing
+                  , tickCount = 0
+                  , tickSizeInner = 0
+                  , tickSizeOuter = 0
+                  , tickPadding = 0
+                  }
+                  xscale
+
+              yaxis : Svg msg
+              yaxis =
+                VAxis.axis
+                  { orientation = VAxis.Left
+                  , ticks = Nothing
+                  , tickFormat = Nothing
+                  , tickCount = 0
+                  , tickSizeInner = 0
+                  , tickSizeOuter = 0
+                  , tickPadding = 0
+                  }
+                  yscale
+
+              point : GCStats -> Svg msg
+              point stats =
+                Svg.g
+                  [ ]
+                  [ Svg.circle
+                      [ Svg.Attributes.cx
+                          <| toString
+                          <| VScale.convert xscale (getx stats)
+                      , Svg.Attributes.cy
+                          <| toString
+                          <| VScale.convert yscale (gety stats)
+                      , Svg.Attributes.r "5"
+                      ]
+                      [ ]
+                  ]
+
+          in [ Svg.g [ Svg.Attributes.transform "translate(0, 590)" ] [xaxis]
+             , Svg.g [ ] [yaxis]
+             , Svg.g [ ] (List.map point stats)
+             ]
+    in
+        Svg.svg attributes elements
