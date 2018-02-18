@@ -284,7 +284,7 @@ handleRunRequest conn request = do
       Right (Left err) ->
         io (throw (EventlogParseException err eventlog'))
       Right (Right (GHC.dat -> GHC.Data events)) ->
-        forM_ events (sendEvent conn)
+        forM_ events (sendResponse conn)
 #endif
 
   -- Send a big hunk of stats.

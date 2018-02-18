@@ -422,6 +422,7 @@ viewTable columns elements =
             |> tbody []
         ]
 
+
 renderLiveBytesSVG : List GCStats -> Svg msg
 renderLiveBytesSVG stats =
     let
@@ -433,88 +434,90 @@ renderLiveBytesSVG stats =
 
         elements : List (Svg msg)
         elements =
-          let
-              getx : GCStats -> Float
-              getx =
-                .totalTime >> .elapsed
+            let
+                getx : GCStats -> Float
+                getx =
+                    .totalTime >> .elapsed
 
-              gety : GCStats -> Float
-              gety =
-                .liveBytes >> toFloat
+                gety : GCStats -> Float
+                gety =
+                    .liveBytes >> toFloat
 
-              xscale : ContinuousScale
-              xscale =
-                let xmax : Float
-                    xmax =
-                      stats
-                        |> List.last
-                        |> Maybe.unwrap 0 getx
-                in
-                  VScale.linear (0, xmax) (0, 800)
+                xscale : ContinuousScale
+                xscale =
+                    let
+                        xmax : Float
+                        xmax =
+                            stats
+                                |> List.last
+                                |> Maybe.unwrap 0 getx
+                    in
+                        VScale.linear ( 0, xmax ) ( 0, 800 )
 
-              yscale : ContinuousScale
-              yscale =
-                let ymin : Float
-                    ymin =
-                      stats
-                        |> List.map .liveBytes
-                        |> List.minimum
-                        |> Maybe.unwrap 0 toFloat
+                yscale : ContinuousScale
+                yscale =
+                    let
+                        ymin : Float
+                        ymin =
+                            stats
+                                |> List.map .liveBytes
+                                |> List.minimum
+                                |> Maybe.unwrap 0 toFloat
 
-                    ymax : Float
-                    ymax =
-                      stats
-                        |> List.map .liveBytes
-                        |> List.maximum
-                        |> Maybe.unwrap 0 toFloat
-                in
-                  VScale.linear (ymin, ymax) (600, 0)
+                        ymax : Float
+                        ymax =
+                            stats
+                                |> List.map .liveBytes
+                                |> List.maximum
+                                |> Maybe.unwrap 0 toFloat
+                    in
+                        VScale.linear ( ymin, ymax ) ( 600, 0 )
 
-              xaxis : Svg msg
-              xaxis =
-                VAxis.axis
-                  { orientation = VAxis.Bottom
-                  , ticks = Nothing
-                  , tickFormat = Nothing
-                  , tickCount = 0
-                  , tickSizeInner = 0
-                  , tickSizeOuter = 0
-                  , tickPadding = 0
-                  }
-                  xscale
+                xaxis : Svg msg
+                xaxis =
+                    VAxis.axis
+                        { orientation = VAxis.Bottom
+                        , ticks = Nothing
+                        , tickFormat = Nothing
+                        , tickCount = 0
+                        , tickSizeInner = 0
+                        , tickSizeOuter = 0
+                        , tickPadding = 0
+                        }
+                        xscale
 
-              yaxis : Svg msg
-              yaxis =
-                VAxis.axis
-                  { orientation = VAxis.Left
-                  , ticks = Nothing
-                  , tickFormat = Nothing
-                  , tickCount = 0
-                  , tickSizeInner = 0
-                  , tickSizeOuter = 0
-                  , tickPadding = 0
-                  }
-                  yscale
+                yaxis : Svg msg
+                yaxis =
+                    VAxis.axis
+                        { orientation = VAxis.Left
+                        , ticks = Nothing
+                        , tickFormat = Nothing
+                        , tickCount = 0
+                        , tickSizeInner = 0
+                        , tickSizeOuter = 0
+                        , tickPadding = 0
+                        }
+                        yscale
 
-              point : GCStats -> Svg msg
-              point stats =
-                Svg.g
-                  [ ]
-                  [ Svg.circle
-                      [ Svg.Attributes.cx
-                          <| toString
-                          <| VScale.convert xscale (getx stats)
-                      , Svg.Attributes.cy
-                          <| toString
-                          <| VScale.convert yscale (gety stats)
-                      , Svg.Attributes.r "5"
-                      ]
-                      [ ]
-                  ]
-
-          in [ Svg.g [ Svg.Attributes.transform "translate(0, 590)" ] [xaxis]
-             , Svg.g [ ] [yaxis]
-             , Svg.g [ ] (List.map point stats)
-             ]
+                point : GCStats -> Svg msg
+                point stats =
+                    Svg.g
+                        []
+                        [ Svg.circle
+                            [ Svg.Attributes.cx <|
+                                toString <|
+                                    VScale.convert xscale (getx stats)
+                            , Svg.Attributes.cy <|
+                                toString <|
+                                    VScale.convert yscale (gety stats)
+                            , Svg.Attributes.r "5"
+                            ]
+                            []
+                        ]
+            in
+                [ Svg.g [ Svg.Attributes.transform "translate(0, 590)" ] [ xaxis ]
+                , Svg.g [] [ yaxis ]
+                , Svg.g [] (List.map point stats)
+                ]
     in
         Svg.svg attributes elements
