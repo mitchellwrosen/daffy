@@ -3,6 +3,9 @@
 
 import Control.Concurrent (newChan, readChan)
 import Data.Function ((&))
+import Data.HashMap.Strict (HashMap)
+import Data.Text (Text, pack)
+import Data.Text.Encoding (encodeUtf8)
 import Development.Shake
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
@@ -10,7 +13,12 @@ import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
 import UnliftIO (tryAny)
 
-import qualified Data.Set as Set
+import qualified Data.Aeson as Aeson (Value, json, withObject)
+import qualified Data.Aeson.Internal as Aeson (iparse)
+import qualified Data.Aeson.Parser as Aeson (eitherDecodeStrictWith)
+import qualified Data.Aeson.Types as Aeson (Parser, parseField)
+import qualified Data.HashMap.Strict as HashMap (toList)
+import qualified Data.Set as Set (fromList)
 
 main :: IO ()
 main =
@@ -65,6 +73,27 @@ rules stack = do
   "*//.git" %> \_ ->
     cmd_ "git submodule update --init --recursive"
 
+  -- Snip out just the dependencies from "elm-package.json" and write them to
+  -- ".shake/elm-deps.txt".
+  ".shake/elm-deps.txt" %> \out -> do
+    bytes <- encodeUtf8 . pack <$> readFile' "elm-package.json"
+    let parser :: Aeson.Value -> Aeson.Parser (HashMap Text Text)
+        parser =
+          Aeson.withObject "elm-package.json" $ \o ->
+            Aeson.parseField o (pack "dependencies")
+    case Aeson.eitherDecodeStrictWith Aeson.json (Aeson.iparse parser) bytes of
+      Left (_, err) ->
+        fail err
+      Right deps ->
+        writeFileChanged out (show (HashMap.toList deps))
+
+  -- Write an empty "elm-deps.stamp" file whenever the dependencies in
+  -- "elm-package.json" change.
+  ".shake/elm-deps.stamp" %> \out -> do
+    need [".shake/elm-deps.txt"]
+    cmd_ "elm package install --yes"
+    writeFile' out ""
+
   "bin/daffy" %> \_ -> do
     _ <- getEnv "DAFFY_DEV"
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
@@ -86,5 +115,5 @@ rules stack = do
 
   "daffy-server/codegen/daffy.js" %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
-    need ("elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
+    need (".shake/elm-deps.stamp" : "elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
     cmd_ ("elm-make --debug daffy-client/src/Main.elm --output=" ++ out)
