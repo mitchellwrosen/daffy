@@ -8,13 +8,9 @@ executable Shakefile
   main-is: Shakefile.hs
   ghc-options: -Wall -threaded -rtsopts "-with-rtsopts=-I0 -qb -qg"
   build-depends:
-      aeson
-    , base
+      base
     , containers
     , directory
     , fsnotify
     , shake >= 0.16.1
-    , text
     , unix
-    , unliftio
-    , unordered-containers
