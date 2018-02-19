@@ -65,6 +65,6 @@ run cmd = do
 
   case minfo of
     Nothing ->
-      throw (InfoParseException out)
+      throwIO (InfoParseException out)
     Just info ->
       pure info

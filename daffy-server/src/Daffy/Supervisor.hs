@@ -36,6 +36,6 @@ wait (Supervisor ref) = io $ do
       waitCatch w >>= \case
         Left ex -> do
           mapM_ cancel ws
-          throw ex
+          throwIO ex
         Right () ->
           go ws

@@ -167,4 +167,4 @@ eventStream path decoder bytes =
     GHC.Done _ ->
       error "Done"
     GHC.Error _ err ->
-      lift (throw (EventlogParseException err path))
+      lift (throwIO (EventlogParseException err path))

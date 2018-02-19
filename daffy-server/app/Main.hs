@@ -5,6 +5,7 @@
 {-# options_ghc -fno-warn-orphans #-}
 
 import Daffy.Exception
+import Daffy.Proto.ErrorResp (ErrorResp(ErrorResp))
 import Daffy.Proto.ExitCodeResp (ExitCodeResp(ExitCodeResp))
 import Daffy.Proto.FlamegraphResp (FlamegraphResp(FlamegraphResp))
 import Daffy.Proto.OutputResp (OutputResp(OutputResp))
@@ -77,8 +78,12 @@ main' = do
     else
       v0 "Running on http://localhost:8080"
 
+  running_ref :: IORef Bool <-
+    newIORef False
+
   Warp.runSettings settings
-    (websocketsOr WebSockets.defaultConnectionOptions wsApp (log httpApp))
+    (websocketsOr WebSockets.defaultConnectionOptions (wsApp running_ref)
+      (log httpApp))
 
  where
   settings :: Warp.Settings
@@ -148,8 +153,8 @@ httpApp request respond = do
   notFound =
     Wai.responseLBS status404 [] ""
 
-wsApp :: Given V => WebSockets.PendingConnection -> IO ()
-wsApp pconn = do
+wsApp :: Given V => IORef Bool -> WebSockets.PendingConnection -> IO ()
+wsApp running_ref pconn = do
   v1 (show (WebSockets.pendingRequest pconn))
 
   conn :: WebSockets.Connection <-
@@ -161,7 +166,13 @@ wsApp pconn = do
 
     case request of
       RunReq{} ->
-        runManaged (handleRunRequest conn request)
+        atomicModifyIORef' running_ref (True ,) >>= \case
+          True ->
+            sendResponse conn (ErrorResp "Already running a process")
+          False ->
+            forkIO_
+              (runManaged (handleRunRequest conn request)
+                `finally` writeIORef running_ref False)
 
 recvRequest :: Given V => WebSockets.Connection -> IO RunReq
 recvRequest conn = do
@@ -172,7 +183,7 @@ recvRequest conn = do
 
   case Aeson.eitherDecode blob of
     Left err ->
-      throw (RequestParseException blob err)
+      throwIO (RequestParseException blob err)
 
     Right request ->
       pure request
@@ -282,7 +293,7 @@ handleRunRequest conn request = do
       Left _ ->
         v2 (eventlog' ++ " not found")
       Right (Left err) ->
-        io (throw (EventlogParseException err eventlog'))
+        io (throwIO (EventlogParseException err eventlog'))
       Right (Right (GHC.dat -> GHC.Data events)) ->
         forM_ events (sendResponse conn)
 #endif
@@ -297,7 +308,7 @@ handleRunRequest conn request = do
         -- invocation is written at the top.
         case Stats.parse (Text.dropWhile (/= '\n') bytes) of
           Left err ->
-            io (throw (StatsParseException err statsfile))
+            io (throwIO (StatsParseException err statsfile))
           Right stats ->
             sendResponse conn stats
 
@@ -309,7 +320,7 @@ handleRunRequest conn request = do
       Right bytes ->
         case Profile.parse bytes of
           Left err ->
-            io (throw (ProfileParseException err proffile))
+            io (throwIO (ProfileParseException err proffile))
 
           Right prof -> do
             let ticks_entries :: [Text]

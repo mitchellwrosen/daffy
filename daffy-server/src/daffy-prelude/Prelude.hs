@@ -3,6 +3,7 @@ module Prelude
   , LByteString
   , List1
   , SByteString
+  , forkIO_
   , hPutStrLn
   , identity
   , io
@@ -10,7 +11,6 @@ module Prelude
   ) where
 
 import Control.Applicative as X
-import Control.Concurrent as X (forkIO, threadDelay)
 import Control.Concurrent.Async as X
 import Control.Concurrent.MVar as X
 import Control.Concurrent.STM as X
@@ -18,8 +18,6 @@ import Control.Monad as X
 import Control.Monad.IO.Class as X (MonadIO)
 import Control.Monad.Managed as X
 import Control.Exception as X (Exception, displayException)
-import Control.Exception.Safe as X
-  (catch, catchAny, finally, throw, try, tryAny)
 import Data.ByteString as X (ByteString)
 import Data.Either as X
 import Data.Foldable as X (toList)
@@ -39,6 +37,9 @@ import "base" Prelude as X hiding (String, id, log, putStrLn)
 import System.IO as X (Handle, stderr, withFile)
 import System.Exit as X (ExitCode(..), exitFailure)
 import Text.Read as X (readMaybe)
+import UnliftIO as X
+  (MonadUnliftIO, catch, catchAny, finally, throwIO, try, tryAny)
+import UnliftIO.Concurrent as X (forkIO, threadDelay)
 
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -56,6 +57,10 @@ type List1
 
 type SByteString
   = Data.ByteString.Streaming.ByteString
+
+forkIO_ :: MonadUnliftIO m => m () -> m ()
+forkIO_ =
+  void . forkIO
 
 hPutStrLn :: MonadIO m => Handle -> [Char] -> m ()
 hPutStrLn handle =
