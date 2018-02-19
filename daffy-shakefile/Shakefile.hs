@@ -66,6 +66,10 @@ rules stack = do
     , "bin/Shakefile"
     ]
 
+  phony "clean" $ do
+    liftIO (removeFiles "bin" ["*"])
+    removeFilesAfter ".shake" ["*"]
+
   -- Whenever .gitmodules changes, recursively init/update all of them.
   ".shake/gitmodules" %> \out -> do
     Stdout xs <- cmd "git config -f .gitmodules --get-regexp path$"
