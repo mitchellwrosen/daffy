@@ -9,27 +9,27 @@ import Html.Events
 import Json.Decode exposing (..)
 import Json.Encode
 import LineChart
-import LineChart.Dots as Dots exposing (Shape)
-import LineChart.Axis as Axis
-import LineChart.Container as Container
-import LineChart.Interpolation as Interpolation
-import LineChart.Legends as Legends
-import LineChart.Events as Events
-import LineChart.Junk as Junk
-import LineChart.Grid as Grid
 import LineChart.Area as Area
-import LineChart.Line as Line
-import LineChart.Dots as Dots
+import LineChart.Axis as Axis
 import LineChart.Axis.Intersection as Intersection
+import LineChart.Container as Container
+import LineChart.Dots as Dots
+import LineChart.Events as Events
+import LineChart.Grid as Grid
+import LineChart.Interpolation as Interpolation
+import LineChart.Junk as Junk
+import LineChart.Legends as Legends
+import LineChart.Line as Line
 import List.Extra as List
+import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 import Maybe.Extra as Maybe
 import Step exposing (Step)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Visualization.Axis as VAxis
+import Visualization.Path as VPath
 import Visualization.Scale as VScale exposing (ContinuousScale)
 import WebSocket
-import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 
 
 main : Program Never Model Msg
@@ -269,8 +269,7 @@ view model =
                 )
     in
         div [ class "container" ] <|
-            [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ]
-            ]
+            [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
                 ++ case model of
                     Initial model_ ->
                         [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
@@ -331,25 +330,31 @@ view model =
                         , viewProgramOutput programData programRun
                         ]
                             ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
-                            ++ [ Maybe.map viewStats programRun.stats
-                                    |> Maybe.withDefault (text "")
-                               ]
+                            ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
 
 
-viewStats : Stats -> Html msg
-viewStats stats =
+viewStats : List GCStats -> Html msg
+viewStats garbageCollections =
     let
-        timeBucketedGCs : List { totalTimeElapsed : Float, averageLiveBytes : Float }
+        timeBucketedGCs : List { totalTimeElapsed : Float, averageLiveBytes : Float, generation : Int }
         timeBucketedGCs =
-            stats.garbageCollections
+            garbageCollections
                 |> groupBy (\prev curr -> curr.totalTime.elapsed == prev.totalTime.elapsed)
-                |> List.map
-                    (\(Nonempty firstGC groupedGCs) ->
-                        { totalTimeElapsed = firstGC.totalTime.elapsed
-                        , averageLiveBytes =
-                            toFloat (firstGC.liveBytes + List.sum (List.map .liveBytes groupedGCs))
-                                / (1 + (toFloat <| List.length groupedGCs))
-                        }
+                |> List.concatMap
+                    (\gcsAtTime ->
+                        gcsAtTime
+                            |> Nonempty.toList
+                            |> List.sortBy .generation
+                            |> groupBy (\a b -> a.generation == b.generation)
+                            |> List.map
+                                (\(Nonempty { generation, totalTime, liveBytes } gcs) ->
+                                    { totalTimeElapsed = totalTime.elapsed
+                                    , averageLiveBytes =
+                                        toFloat (liveBytes + List.sum (List.map .liveBytes gcs))
+                                            / (1 + (toFloat <| List.length gcs))
+                                    , generation = generation
+                                    }
+                                )
                     )
     in
         div []
@@ -359,7 +364,6 @@ viewStats stats =
                     "Last Run"
                     timeBucketedGCs
                 ]
-            , renderLiveBytesSVG timeBucketedGCs
             , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
             ]
 
@@ -458,7 +462,7 @@ margin =
     ( 800 - margin.left - margin.right, 500 - margin.top - margin.bottom )
 
 
-renderLiveBytesSVG : List { averageLiveBytes : Float, totalTimeElapsed : Float } -> Svg msg
+renderLiveBytesSVG : List { averageLiveBytes : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
 renderLiveBytesSVG stats =
     let
         ( getx, gety ) =
@@ -520,21 +524,10 @@ renderLiveBytesSVG stats =
                 }
                 yscale
 
-        -- point : GCStats -> Svg msg
-        point stats =
-            Svg.g
-                []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <|
-                        toString <|
-                            VScale.convert xscale (getx stats)
-                    , Svg.Attributes.cy <|
-                        toString <|
-                            VScale.convert yscale (gety stats)
-                    , Svg.Attributes.r "1"
-                    ]
-                    []
-                ]
+        -- addPoint : _ -> VPath.Path -> VPath.Path
+        addPoint stats =
+            VPath.moveTo (VScale.convert xscale (getx stats)) (VScale.convert yscale (gety stats))
+                >> VPath.lineTo (VScale.convert xscale (getx stats)) (VScale.convert yscale (gety stats + 1))
     in
         Svg.svg
             [ Svg.Attributes.width (toString (width + margin.left + margin.right))
@@ -544,7 +537,17 @@ renderLiveBytesSVG stats =
                 [ transformTranslate ( margin.left, margin.top ) ]
                 [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
                 , Svg.g [] [ yaxis ]
-                , Svg.g [] (List.map point stats)
+                , Svg.path
+                    [ Svg.Attributes.d
+                        (stats
+                            |> List.foldl addPoint VPath.begin
+                            |> VPath.close
+                            |> VPath.toAttrString
+                        )
+                    , Svg.Attributes.stroke "blue"
+                    , Svg.Attributes.strokeWidth "50"
+                    ]
+                    []
                 ]
             ]
 
