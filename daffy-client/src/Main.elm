@@ -172,7 +172,7 @@ update msg model =
             Step.to (Initial { data | runs = Array.push programRun data.runs })
 
         _ ->
-            Debug.crash "Invalid message"
+            Step.noop
 
 
 subscriptions : Model -> Sub Msg
