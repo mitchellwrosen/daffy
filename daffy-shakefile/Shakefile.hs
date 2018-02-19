@@ -7,6 +7,7 @@ import Data.HashMap.Strict (HashMap)
 import Data.Text (Text, pack)
 import Data.Text.Encoding (encodeUtf8)
 import Development.Shake
+import Development.Shake.FilePath
 import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
 import System.FSNotify (eventPath, watchTreeChan, withManager)
@@ -58,19 +59,20 @@ main =
 
 rules :: (forall a. Action a -> Action a) -> Rules ()
 rules stack = do
-  action $ do
+  -- The files we want to build, in no particular order.
+  want
+    [ ".shake/gitmodules"
+    , "bin/daffy"
+    , "bin/Shakefile"
+    ]
+
+  -- Whenever .gitmodules changes, recursively init/update all of them.
+  ".shake/gitmodules" %> \out -> do
     Stdout xs <- cmd "git config -f .gitmodules --get-regexp path$"
-    let submodules = xs & lines & map ((++ "/.git") . (!! 1) . words)
-
-    -- The files we want to build, in no particular order.
-    need
-      ( "bin/daffy"
-      : "bin/Shakefile"
-      : submodules
-      )
-
-  "*//.git" %> \_ ->
+    let submodules = xs & lines & map ((</> ".git") . (!! 1) . words)
+    need (".gitmodules" : submodules)
     cmd_ "git submodule update --init --recursive"
+    writeFile' out ""
 
   -- Snip out just the dependencies from "elm-package.json" and write them to
   -- ".shake/elm-deps.txt".
