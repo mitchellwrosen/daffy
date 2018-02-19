@@ -29,6 +29,7 @@ import Svg.Attributes
 import Visualization.Axis as VAxis
 import Visualization.Scale as VScale exposing (ContinuousScale)
 import WebSocket
+import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 
 
 main : Program Never Model Msg
@@ -320,8 +321,7 @@ view model =
                         ]
 
                     RunningProgram programData programOutput ->
-                        [ viewProgramOutput programData programOutput
-                        ]
+                        [ viewProgramOutput programData programOutput ]
 
                     MsgParseError parseError ->
                         [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
@@ -331,36 +331,69 @@ view model =
                         , viewProgramOutput programData programRun
                         ]
                             ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
-                            ++ [ case programRun.stats of
-                                    Just stats ->
-                                        div []
-                                            [ LineChart.viewCustom (chartConfig (toFloat << .liveBytes))
-                                                [ LineChart.line (Color.rgb 255 99 71)
-                                                    Dots.none
-                                                    "Last Run"
-                                                    stats.garbageCollections
-                                                ]
-                                            , LineChart.viewCustom (chartConfig (toFloat << .bytesCopied))
-                                                [ LineChart.line (Color.rgb 255 99 71)
-                                                    Dots.none
-                                                    "Last Run"
-                                                    stats.garbageCollections
-                                                ]
-                                            , renderLiveBytesSVG stats.garbageCollections
-                                            , div [] [ text <| "Length: " ++ toString (List.length stats.garbageCollections) ]
-                                            ]
-
-                                    Nothing ->
-                                        text ""
+                            ++ [ Maybe.map viewStats programRun.stats
+                                    |> Maybe.withDefault (text "")
                                ]
 
 
-chartConfig : (GCStats -> Float) -> LineChart.Config GCStats msg
-chartConfig y =
-    { x = Axis.default 1000 "Time Elapsed" (.totalTime >> .elapsed)
+viewStats : Stats -> Html msg
+viewStats stats =
+    let
+        timeBucketedGCs : List { totalTimeElapsed : Float, averageLiveBytes : Float }
+        timeBucketedGCs =
+            stats.garbageCollections
+                |> groupBy (\prev curr -> curr.totalTime.elapsed == prev.totalTime.elapsed)
+                |> List.map
+                    (\(Nonempty firstGC groupedGCs) ->
+                        { totalTimeElapsed = firstGC.totalTime.elapsed
+                        , averageLiveBytes =
+                            toFloat (firstGC.liveBytes + List.sum (List.map .liveBytes groupedGCs))
+                                / (1 + (toFloat <| List.length groupedGCs))
+                        }
+                    )
+                |> Debug.log "thingy"
+
+        _ =
+            Debug.log "shorter" (List.length timeBucketedGCs /= List.length stats.garbageCollections)
+
+        _ =
+            Debug.log "unique" (List.map .totalTimeElapsed timeBucketedGCs == (List.unique (List.map .totalTimeElapsed timeBucketedGCs)))
+    in
+        div []
+            [ LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
+                [ LineChart.line (Color.rgb 255 99 71)
+                    Dots.none
+                    "Last Run"
+                    timeBucketedGCs
+                ]
+            , renderLiveBytesSVG timeBucketedGCs
+            , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
+            ]
+
+
+groupBy : (a -> a -> Bool) -> List a -> List (Nonempty a)
+groupBy sameGroup =
+    List.foldr
+        (\x ys ->
+            case ys of
+                (Nonempty y ys_) :: groups ->
+                    if sameGroup x y then
+                        Nonempty x (y :: ys_) :: groups
+                    else
+                        Nonempty x [] :: ys
+
+                [] ->
+                    [ Nonempty x [] ]
+        )
+        []
+
+
+chartConfig : (data -> Float) -> (data -> Float) -> LineChart.Config data msg
+chartConfig x y =
+    { x = Axis.default 1000 "Time Elapsed" x
     , y = Axis.default 600 "Bytes" y
     , container = Container.responsive "line-chart-1"
-    , interpolation = Interpolation.default
+    , interpolation = Interpolation.stepped
     , intersection = Intersection.default
     , legends = Legends.default
     , events = Events.default
@@ -423,101 +456,116 @@ viewTable columns elements =
         ]
 
 
-renderLiveBytesSVG : List GCStats -> Svg msg
+margin : { bottom : number, left : number1, right : number2, top : number3 }
+margin =
+    { top = 20, right = 40, bottom = 20, left = 40 }
+
+
+( width, height ) =
+    ( 800 - margin.left - margin.right, 500 - margin.top - margin.bottom )
+
+
+renderLiveBytesSVG : List { averageLiveBytes : Float, totalTimeElapsed : Float } -> Svg msg
 renderLiveBytesSVG stats =
     let
-        attributes : List (Attribute msg)
-        attributes =
-            [ Svg.Attributes.width "800px"
-            , Svg.Attributes.height "600px"
-            ]
+        ( getx, gety ) =
+            ( .totalTimeElapsed, .averageLiveBytes )
 
-        elements : List (Svg msg)
-        elements =
+        xscale : ContinuousScale
+        xscale =
             let
-                getx : GCStats -> Float
-                getx =
-                    .totalTime >> .elapsed
-
-                gety : GCStats -> Float
-                gety =
-                    .liveBytes >> toFloat
-
-                xscale : ContinuousScale
-                xscale =
-                    let
-                        xmax : Float
-                        xmax =
-                            stats
-                                |> List.last
-                                |> Maybe.unwrap 0 getx
-                    in
-                        VScale.linear ( 0, xmax ) ( 0, 800 )
-
-                yscale : ContinuousScale
-                yscale =
-                    let
-                        ymin : Float
-                        ymin =
-                            stats
-                                |> List.map .liveBytes
-                                |> List.minimum
-                                |> Maybe.unwrap 0 toFloat
-
-                        ymax : Float
-                        ymax =
-                            stats
-                                |> List.map .liveBytes
-                                |> List.maximum
-                                |> Maybe.unwrap 0 toFloat
-                    in
-                        VScale.linear ( ymin, ymax ) ( 600, 0 )
-
-                xaxis : Svg msg
-                xaxis =
-                    VAxis.axis
-                        { orientation = VAxis.Bottom
-                        , ticks = Nothing
-                        , tickFormat = Nothing
-                        , tickCount = 0
-                        , tickSizeInner = 0
-                        , tickSizeOuter = 0
-                        , tickPadding = 0
-                        }
-                        xscale
-
-                yaxis : Svg msg
-                yaxis =
-                    VAxis.axis
-                        { orientation = VAxis.Left
-                        , ticks = Nothing
-                        , tickFormat = Nothing
-                        , tickCount = 0
-                        , tickSizeInner = 0
-                        , tickSizeOuter = 0
-                        , tickPadding = 0
-                        }
-                        yscale
-
-                point : GCStats -> Svg msg
-                point stats =
-                    Svg.g
-                        []
-                        [ Svg.circle
-                            [ Svg.Attributes.cx <|
-                                toString <|
-                                    VScale.convert xscale (getx stats)
-                            , Svg.Attributes.cy <|
-                                toString <|
-                                    VScale.convert yscale (gety stats)
-                            , Svg.Attributes.r "5"
-                            ]
-                            []
-                        ]
+                xmax : Float
+                xmax =
+                    stats
+                        |> List.last
+                        |> Maybe.unwrap 0 getx
+                        |> Debug.log "xmax"
             in
-                [ Svg.g [ Svg.Attributes.transform "translate(0, 590)" ] [ xaxis ]
+                VScale.linear ( 0, xmax ) ( 0, width )
+
+        yscale : ContinuousScale
+        yscale =
+            let
+                ymin : Float
+                ymin =
+                    stats
+                        |> List.map .averageLiveBytes
+                        |> List.minimum
+                        |> Maybe.withDefault 0
+                        |> Debug.log "ymin"
+
+                ymax : Float
+                ymax =
+                    stats
+                        |> List.map .averageLiveBytes
+                        |> List.maximum
+                        |> Maybe.withDefault 0
+                        |> Debug.log "ymax"
+            in
+                VScale.linear ( ymin, ymax ) ( height, 0 )
+
+        xaxis : Svg msg
+        xaxis =
+            VAxis.axis
+                { orientation = VAxis.Bottom
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                xscale
+
+        yaxis : Svg msg
+        yaxis =
+            VAxis.axis
+                { orientation = VAxis.Left
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                yscale
+
+        -- point : GCStats -> Svg msg
+        point stats =
+            Svg.g
+                []
+                [ Svg.circle
+                    [ Svg.Attributes.cx <|
+                        toString <|
+                            VScale.convert xscale (getx stats)
+                    , Svg.Attributes.cy <|
+                        toString <|
+                            VScale.convert yscale (gety stats)
+                    , Svg.Attributes.r "1"
+                    ]
+                    []
+                ]
+    in
+        Svg.svg
+            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
+            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
+            ]
+            [ Svg.g
+                [ transformTranslate (Debug.log "g1" ( margin.left, margin.top )) ]
+                [ Svg.g [ transformTranslate (Debug.log "g2" ( 0, height )) ] [ xaxis ]
                 , Svg.g [] [ yaxis ]
                 , Svg.g [] (List.map point stats)
                 ]
-    in
-        Svg.svg attributes elements
+            ]
+
+
+transformTranslate : ( a, b ) -> Svg.Attribute msg
+transformTranslate ( x, y ) =
+    Svg.Attributes.transform <|
+        String.concat
+            [ "translate("
+            , toString x
+            , ","
+            , toString y
+            , ")"
+            ]

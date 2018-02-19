@@ -23,6 +23,7 @@
         "gampleman/elm-visualization": "1.6.1 <= v < 2.0.0",
         "justinmimbs/elm-date-extra": "2.0.3 <= v < 3.0.0",
         "mgold/elm-date-format": "1.4.2 <= v < 2.0.0",
+        "mgold/elm-nonempty-list": "3.1.0 <= v < 4.0.0",
         "myrho/elm-round": "1.0.0 <= v < 2.0.0",
         "xilnocas/step": "1.1.0 <= v < 2.0.0"
     },
