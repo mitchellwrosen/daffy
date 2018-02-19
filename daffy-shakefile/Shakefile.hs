@@ -94,7 +94,6 @@ rules stack = do
     writeFile' out ""
 
   "bin/daffy" %> \_ -> do
-    _ <- getEnv "DAFFY_DEV"
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
     need ("stack.yaml" : "daffy-server/daffy.cabal" : "daffy-server/codegen/daffy.js" : files)
     stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
@@ -105,7 +104,7 @@ rules stack = do
 
   "bin/daffy-elm-codegen" %> \_ -> do
     files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
-    need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : "daffy-server/codegen/daffy.js" : files)
+    need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
     stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
 
   "daffy-client/codegen/DaffyTypes.elm" %> \out -> do
