@@ -317,6 +317,7 @@ view model =
                                     ]
                                 ]
                             ]
+                        , Html.map never <| viewFlagsRequired model_
                         ]
 
                     RunningProgram programData programOutput ->
@@ -331,6 +332,45 @@ view model =
                         ]
                             ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
                             ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
+
+
+type Flag
+    = Stats
+    | Prof
+    | EventLog
+
+
+flagToString : Flag -> String
+flagToString flag =
+    case flag of
+        Stats ->
+            "--Foo"
+
+        Prof ->
+            "--Baz"
+
+        EventLog ->
+            "--Bar"
+
+
+viewFlagsRequired : ProgramData -> Html Never
+viewFlagsRequired { stats, prof, eventlog } =
+    let
+        flags =
+            [ ( Stats, stats ), ( Prof, prof ), ( EventLog, eventlog ) ]
+                |> List.filter Tuple.second
+                |> List.map (Tuple.first >> flagToString)
+                |> String.join " "
+
+        preface =
+            "Note: Your program must be compiled with these flags: "
+    in
+        div [ class "flags-required" ]
+            [ span [ class "flags-required__preface" ]
+                [ text preface ]
+            , span [ class "flags-required__flags" ]
+                [ text flags ]
+            ]
 
 
 viewStats : List GCStats -> Html msg
