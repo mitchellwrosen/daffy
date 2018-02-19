@@ -351,13 +351,6 @@ viewStats stats =
                                 / (1 + (toFloat <| List.length groupedGCs))
                         }
                     )
-                |> Debug.log "thingy"
-
-        _ =
-            Debug.log "shorter" (List.length timeBucketedGCs /= List.length stats.garbageCollections)
-
-        _ =
-            Debug.log "unique" (List.map .totalTimeElapsed timeBucketedGCs == (List.unique (List.map .totalTimeElapsed timeBucketedGCs)))
     in
         div []
             [ LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
@@ -479,7 +472,6 @@ renderLiveBytesSVG stats =
                     stats
                         |> List.last
                         |> Maybe.unwrap 0 getx
-                        |> Debug.log "xmax"
             in
                 VScale.linear ( 0, xmax ) ( 0, width )
 
@@ -492,7 +484,6 @@ renderLiveBytesSVG stats =
                         |> List.map .averageLiveBytes
                         |> List.minimum
                         |> Maybe.withDefault 0
-                        |> Debug.log "ymin"
 
                 ymax : Float
                 ymax =
@@ -500,7 +491,6 @@ renderLiveBytesSVG stats =
                         |> List.map .averageLiveBytes
                         |> List.maximum
                         |> Maybe.withDefault 0
-                        |> Debug.log "ymax"
             in
                 VScale.linear ( ymin, ymax ) ( height, 0 )
 
@@ -551,8 +541,8 @@ renderLiveBytesSVG stats =
             , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
             ]
             [ Svg.g
-                [ transformTranslate (Debug.log "g1" ( margin.left, margin.top )) ]
-                [ Svg.g [ transformTranslate (Debug.log "g2" ( 0, height )) ] [ xaxis ]
+                [ transformTranslate ( margin.left, margin.top ) ]
+                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
                 , Svg.g [] [ yaxis ]
                 , Svg.g [] (List.map point stats)
                 ]
