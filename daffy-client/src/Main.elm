@@ -460,6 +460,9 @@ view model =
                         ]
                             ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
                             ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
+                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderBytesAllocatedSVG)) [ programRun.stats ]
+                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderBytesCopiedSVG)) [ programRun.stats ]
+                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderLiveBytesSVG)) [ programRun.stats ]
 
 
 radio : String -> Bool -> a -> List (Html a)
@@ -485,7 +488,7 @@ viewPreview : ProgramData -> Html a
 viewPreview data =
     case data.command of
         "" ->
-            text ""
+            span [ class "ps1" ] [ text "$" ]
 
         _ ->
             let
@@ -530,7 +533,8 @@ viewPreview data =
                         ]
             in
                 div [ class "command-preview" ]
-                    [ if List.isEmpty flags then
+                    [ span [ class "ps1" ] [ text "$" ]
+                    , if List.isEmpty flags then
                         text data.command
                       else
                         text <|
@@ -579,29 +583,47 @@ viewFlagsRequired data =
                 ]
 
 
+
+-- Bucket garbage collections by timestamp (since the -S output is only accurate
+-- to the millisecond or so). Don't put garbage collections from the same
+-- generation in the same bucket.
+
+
+timeBucketGCs : List GCStats -> List { totalTimeElapsed : Float, averageBytesAllocated : Float, averageBytesCopied : Float, averageLiveBytes : Float, generation : Int }
+timeBucketGCs =
+    groupBy (\prev curr -> curr.totalTime.elapsed == prev.totalTime.elapsed)
+        >> List.concatMap
+            (\gcsAtTime ->
+                gcsAtTime
+                    |> Nonempty.toList
+                    |> List.sortBy .generation
+                    |> groupBy (\a b -> a.generation == b.generation)
+                    |> List.map
+                        (\(Nonempty { generation, bytesAllocated, bytesCopied, totalTime, liveBytes } gcs) ->
+                          let len = toFloat (List.length gcs)
+                          in
+                            { totalTimeElapsed = totalTime.elapsed
+                            , averageBytesAllocated =
+                                toFloat (bytesAllocated + List.sum (List.map .bytesAllocated gcs))
+                                  / (1 + len)
+                            , averageBytesCopied =
+                                toFloat (bytesCopied + List.sum (List.map .bytesCopied gcs))
+                                  / (1 + len)
+                            , averageLiveBytes =
+                                toFloat (liveBytes + List.sum (List.map .liveBytes gcs))
+                                    / (1 + len)
+                            , generation = generation
+                            }
+                        )
+            )
+
+
 viewStats : List GCStats -> Html msg
 viewStats garbageCollections =
     let
-        timeBucketedGCs : List { totalTimeElapsed : Float, averageLiveBytes : Float, generation : Int }
+        timeBucketedGCs : List { totalTimeElapsed : Float, averageBytesAllocated : Float, averageBytesCopied : Float, averageLiveBytes : Float, generation : Int }
         timeBucketedGCs =
-            garbageCollections
-                |> groupBy (\prev curr -> curr.totalTime.elapsed == prev.totalTime.elapsed)
-                |> List.concatMap
-                    (\gcsAtTime ->
-                        gcsAtTime
-                            |> Nonempty.toList
-                            |> List.sortBy .generation
-                            |> groupBy (\a b -> a.generation == b.generation)
-                            |> List.map
-                                (\(Nonempty { generation, totalTime, liveBytes } gcs) ->
-                                    { totalTimeElapsed = totalTime.elapsed
-                                    , averageLiveBytes =
-                                        toFloat (liveBytes + List.sum (List.map .liveBytes gcs))
-                                            / (1 + (toFloat <| List.length gcs))
-                                    , generation = generation
-                                    }
-                                )
-                    )
+            timeBucketGCs garbageCollections
     in
         div []
             [ LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
@@ -657,12 +679,9 @@ margin =
     ( 800 - margin.left - margin.right, 500 - margin.top - margin.bottom )
 
 
-renderLiveBytesSVG : List { averageLiveBytes : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
-renderLiveBytesSVG stats =
+renderBytesAllocatedSVG : List { r | averageBytesAllocated : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
+renderBytesAllocatedSVG stats =
     let
-        ( getx, gety ) =
-            ( .totalTimeElapsed, .averageLiveBytes )
-
         xscale : ContinuousScale
         xscale =
             let
@@ -670,7 +689,185 @@ renderLiveBytesSVG stats =
                 xmax =
                     stats
                         |> List.last
-                        |> Maybe.unwrap 0 getx
+                        |> Maybe.unwrap 0 .totalTimeElapsed
+            in
+                VScale.linear ( 0, xmax ) ( 0, width )
+
+        yscale : ContinuousScale
+        yscale =
+            let
+                ymin : Float
+                ymin =
+                    stats
+                        |> List.map .averageBytesAllocated
+                        |> List.minimum
+                        |> Maybe.withDefault 0
+
+                ymax : Float
+                ymax =
+                    stats
+                        |> List.map .averageBytesAllocated
+                        |> List.maximum
+                        |> Maybe.withDefault 0
+            in
+                VScale.linear ( ymin, ymax ) ( height, 0 )
+
+        xaxis : Svg msg
+        xaxis =
+            VAxis.axis
+                { orientation = VAxis.Bottom
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                xscale
+
+        yaxis : Svg msg
+        yaxis =
+            VAxis.axis
+                { orientation = VAxis.Left
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                yscale
+
+        point stats =
+            Svg.g
+                []
+                [ Svg.circle
+                    [ Svg.Attributes.cx <|
+                        toString <|
+                            VScale.convert xscale (stats.totalTimeElapsed)
+                    , Svg.Attributes.cy <|
+                        toString <|
+                            VScale.convert yscale (stats.averageBytesAllocated)
+                    , Svg.Attributes.r <|
+                        toString <|
+                            2
+                                * (stats.generation + 1)
+                    ]
+                    []
+                ]
+    in
+        Svg.svg
+            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
+            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
+            ]
+            [ Svg.g
+                [ transformTranslate ( margin.left, margin.top ) ]
+                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
+                , Svg.g [] [ yaxis ]
+                , Svg.g [] (List.map point stats)
+                ]
+            ]
+
+renderBytesCopiedSVG : List { r | averageBytesCopied : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
+renderBytesCopiedSVG stats =
+    let
+        xscale : ContinuousScale
+        xscale =
+            let
+                xmax : Float
+                xmax =
+                    stats
+                        |> List.last
+                        |> Maybe.unwrap 0 .totalTimeElapsed
+            in
+                VScale.linear ( 0, xmax ) ( 0, width )
+
+        yscale : ContinuousScale
+        yscale =
+            let
+                ymin : Float
+                ymin =
+                    stats
+                        |> List.map .averageBytesCopied
+                        |> List.minimum
+                        |> Maybe.withDefault 0
+
+                ymax : Float
+                ymax =
+                    stats
+                        |> List.map .averageBytesCopied
+                        |> List.maximum
+                        |> Maybe.withDefault 0
+            in
+                VScale.linear ( ymin, ymax ) ( height, 0 )
+
+        xaxis : Svg msg
+        xaxis =
+            VAxis.axis
+                { orientation = VAxis.Bottom
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                xscale
+
+        yaxis : Svg msg
+        yaxis =
+            VAxis.axis
+                { orientation = VAxis.Left
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                yscale
+
+        point stats =
+            Svg.g
+                []
+                [ Svg.circle
+                    [ Svg.Attributes.cx <|
+                        toString <|
+                            VScale.convert xscale (stats.totalTimeElapsed)
+                    , Svg.Attributes.cy <|
+                        toString <|
+                            VScale.convert yscale (stats.averageBytesCopied)
+                    , Svg.Attributes.r <|
+                        toString <|
+                            2
+                                * (stats.generation + 1)
+                    ]
+                    []
+                ]
+    in
+        Svg.svg
+            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
+            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
+            ]
+            [ Svg.g
+                [ transformTranslate ( margin.left, margin.top ) ]
+                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
+                , Svg.g [] [ yaxis ]
+                , Svg.g [] (List.map point stats)
+                ]
+            ]
+
+renderLiveBytesSVG : List { r | averageLiveBytes : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
+renderLiveBytesSVG stats =
+    let
+        xscale : ContinuousScale
+        xscale =
+            let
+                xmax : Float
+                xmax =
+                    stats
+                        |> List.last
+                        |> Maybe.unwrap 0 .totalTimeElapsed
             in
                 VScale.linear ( 0, xmax ) ( 0, width )
 
@@ -719,10 +916,23 @@ renderLiveBytesSVG stats =
                 }
                 yscale
 
-        -- addPoint : _ -> VPath.Path -> VPath.Path
-        addPoint stats =
-            VPath.moveTo (VScale.convert xscale (getx stats)) (VScale.convert yscale (gety stats))
-                >> VPath.lineTo (VScale.convert xscale (getx stats)) (VScale.convert yscale (gety stats + 1))
+        point stats =
+            Svg.g
+                []
+                [ Svg.circle
+                    [ Svg.Attributes.cx <|
+                        toString <|
+                            VScale.convert xscale (stats.totalTimeElapsed)
+                    , Svg.Attributes.cy <|
+                        toString <|
+                            VScale.convert yscale (stats.averageLiveBytes)
+                    , Svg.Attributes.r <|
+                        toString <|
+                            2
+                                * (stats.generation + 1)
+                    ]
+                    []
+                ]
     in
         Svg.svg
             [ Svg.Attributes.width (toString (width + margin.left + margin.right))
@@ -732,17 +942,7 @@ renderLiveBytesSVG stats =
                 [ transformTranslate ( margin.left, margin.top ) ]
                 [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
                 , Svg.g [] [ yaxis ]
-                , Svg.path
-                    [ Svg.Attributes.d
-                        (stats
-                            |> List.foldl addPoint VPath.begin
-                            |> VPath.close
-                            |> VPath.toAttrString
-                        )
-                    , Svg.Attributes.stroke "blue"
-                    , Svg.Attributes.strokeWidth "50"
-                    ]
-                    []
+                , Svg.g [] (List.map point stats)
                 ]
             ]
 
