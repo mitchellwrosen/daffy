@@ -631,57 +631,6 @@ chartConfig x y =
     }
 
 
-buttonStyle : String
-buttonStyle =
-    "border shadow rounded px-2 py-1"
-
-
-gcTableConfig : List (Column GCStats)
-gcTableConfig =
-    [ Column (.bytesAllocated >> toString) "Bytes Allocated"
-    , Column (.bytesCopied >> toString) "Bytes Copied"
-    , Column (.liveBytes >> toString) "Live Bytes"
-    , Column (.time >> toString) "Time Spent"
-    , Column (.totalTime >> toString) "Total Time"
-    , Column (.pageFaults >> toString) "Page Faults"
-    , Column (.totalPageFaults >> toString) "Total Page Faults"
-    , Column (.generation >> toString) "Generation"
-    ]
-
-
-type alias Column a =
-    { renderColumn : a -> String, name : String }
-
-
-textFilled : (List (Attribute msg) -> List (Html msg) -> Html msg) -> String -> Html msg
-textFilled node str =
-    node [] [ text str ]
-
-
-apply : a -> (a -> b) -> b
-apply =
-    flip identity
-
-
-viewTable : List (Column a) -> List a -> Html msg
-viewTable columns elements =
-    table [ class "my-4" ]
-        [ columns
-            |> List.map (.name >> textFilled th)
-            |> tr []
-            |> List.singleton
-            |> thead []
-        , elements
-            |> List.map
-                (\element ->
-                    columns
-                        |> List.map (.renderColumn >> apply element >> textFilled td)
-                        |> tr []
-                )
-            |> tbody []
-        ]
-
-
 margin : { bottom : number, left : number1, right : number2, top : number3 }
 margin =
     { top = 20, right = 40, bottom = 20, left = 40 }
