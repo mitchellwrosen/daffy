@@ -64,6 +64,7 @@ rules stack = do
   -- The files we want to build, in no particular order.
   want
     [ ".shake/.gitmodules"
+    , ".shake/elm-package.json"
     , "bin/daffy"
     , "bin/daffy-elm-codegen"
     , "bin/Shakefile"
