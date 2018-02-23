@@ -12,6 +12,7 @@ import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
 
 import qualified Data.Set as Set (fromList)
+import qualified System.Info (os)
 
 main :: IO ()
 main =
@@ -50,7 +51,12 @@ main =
       , shakeColor = True
       , shakeLiveFiles = [".shake/live"]
       , shakeProgress = progressSimple
-      , shakeThreads = 4
+      , shakeThreads =
+          -- Temp workaround for resources not being respected on OSX for some
+          -- reason.
+          case System.Info.os of
+            "linux" -> 4
+            _ -> 1
       }
 
 rules :: (forall a. Action a -> Action a) -> Rules ()
