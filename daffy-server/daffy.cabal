@@ -45,7 +45,7 @@ library
     , bytestring
     , containers
     , daffy-prelude
-    , ghc-events
+    , ghc-events >= 0.7.1 && < 0.8
     , streaming
     , streaming-bytestring
     , text
@@ -118,7 +118,7 @@ executable daffy
     , daffy
     , daffy-prelude
     , filepath
-    , ghc-events
+    , ghc-events >= 0.7.1 && < 0.8
     , ghc-prim
     , http-types
     , reflection
