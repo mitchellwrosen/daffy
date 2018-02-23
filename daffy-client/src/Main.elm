@@ -51,9 +51,15 @@ type Model
 
 type alias ProgramData =
     { command : String
-    , stats : Bool
-    , prof : Bool
-    , eventlog : Bool
+    , nurserySize : String -- -A
+    , nurseryChunks : String -- -n
+    , largeObjectSize : String -- -AL
+    , oldGenMinSize : String -- -O
+    , oldGenFactor : String -- -F
+    , compaction : Bool -- -c?
+    , stats : Bool -- -S?
+    , prof : Bool -- -p?
+    , eventlog : Bool -- -l?
     , runs : Array ProgramRun
     }
 
@@ -85,6 +91,12 @@ type alias ProgramRun =
 
 type Msg
     = TypeCommand String
+    | TypeNurserySize String
+    | TypeNurseryChunks String
+    | TypeLargeObjectSize String
+    | TypeOldGenMinSize String
+    | TypeOldGenFactor String
+    | ToggleCompaction Bool
     | ToggleStats Bool
     | ToggleProf Bool
     | ToggleEventlog Bool
@@ -114,7 +126,19 @@ type RunningProgramMsg
 
 init : Model
 init =
-    Initial { command = "", stats = True, prof = False, eventlog = False, runs = Array.empty }
+    Initial
+        { command = ""
+        , nurserySize = ""
+        , nurseryChunks = ""
+        , largeObjectSize = ""
+        , oldGenMinSize = ""
+        , oldGenFactor = ""
+        , compaction = False
+        , stats = True
+        , prof = False
+        , eventlog = False
+        , runs = Array.empty
+        }
 
 
 update : Msg -> Model -> Step Model Msg Never
@@ -122,6 +146,24 @@ update msg model =
     case ( model, msg ) of
         ( Initial model_, TypeCommand s ) ->
             Step.to (Initial { model_ | command = s })
+
+        ( Initial model_, TypeNurserySize s ) ->
+            Step.to (Initial { model_ | nurserySize = s })
+
+        ( Initial model_, TypeNurseryChunks s ) ->
+            Step.to (Initial { model_ | nurseryChunks = s })
+
+        ( Initial model_, TypeLargeObjectSize s ) ->
+            Step.to (Initial { model_ | largeObjectSize = s })
+
+        ( Initial model_, TypeOldGenMinSize s ) ->
+            Step.to (Initial { model_ | oldGenMinSize = s })
+
+        ( Initial model_, TypeOldGenFactor s ) ->
+            Step.to (Initial { model_ | oldGenFactor = s })
+
+        ( Initial model_, ToggleCompaction b ) ->
+            Step.to (Initial { model_ | compaction = b })
 
         ( Initial model_, ToggleStats b ) ->
             Step.to (Initial { model_ | stats = b })
@@ -283,9 +325,85 @@ view model =
                                     ]
                                     []
                                 ]
+                            , div [ class "form-group prompt-group" ]
+                                [ span
+                                    [ class "ps1" ]
+                                    [ text "Nursery size:" ]
+                                , input
+                                    [ type_ "text"
+                                    , Html.Attributes.placeholder "1m"
+                                    , Html.Attributes.value model_.nurserySize
+                                    , Html.Events.onInput TypeNurserySize
+                                    ]
+                                    []
+                                , span
+                                    [ class "ps1" ]
+                                    [ text "split into" ]
+                                , input
+                                    [ type_ "text"
+                                    , Html.Attributes.value model_.nurseryChunks
+                                    , Html.Events.onInput TypeNurseryChunks
+                                    ]
+                                    []
+                                , span [ class "ps1" ] [ text "chunks" ]
+                                ]
+                            , div [ class "form-group prompt-group" ]
+                                [ span
+                                    [ class "ps1" ]
+                                    [ text "Large object size:" ]
+                                , input
+                                    [ type_ "text"
+                                    , Html.Attributes.placeholder <|
+                                        if String.isEmpty model_.nurserySize then
+                                            "1m"
+                                        else
+                                            model_.nurserySize
+                                    , Html.Attributes.value model_.largeObjectSize
+                                    , Html.Events.onInput TypeLargeObjectSize
+                                    ]
+                                    []
+                                ]
+                            , div [ class "form-group prompt-group" ]
+                                [ span
+                                    [ class "ps1" ]
+                                    [ text "Minimum old generation size:" ]
+                                , input
+                                    [ type_ "text"
+                                    , Html.Attributes.placeholder "1m"
+                                    , Html.Attributes.value model_.oldGenMinSize
+                                    , Html.Events.onInput TypeOldGenMinSize
+                                    ]
+                                    []
+                                ]
+                            , div [ class "form-group prompt-group" ]
+                                [ span
+                                    [ class "ps1" ]
+                                    [ text "Old generation factor:" ]
+                                , input
+                                    [ type_ "text"
+                                    , Html.Attributes.placeholder "2"
+                                    , Html.Attributes.value model_.oldGenFactor
+                                    , Html.Events.onInput TypeOldGenFactor
+                                    ]
+                                    []
+                                ]
+                            , div [ class "form-group prompt-group" ]
+                                [ span
+                                    [ class "ps1" ]
+                                    [ text "Collect oldest generation by:" ]
+                                , fieldset []
+                                    [ radio "Copying" (model_.compaction == False) (ToggleCompaction False)
+                                    , radio "Compacting" (model_.compaction == True) (ToggleCompaction True)
+                                    ]
+                                ]
                             , viewPreview model_
                             , div [ class "form-group" ]
-                                [ input [ class "btn", type_ "submit", Html.Attributes.value "Run" ] []
+                                [ input
+                                    [ class "btn"
+                                    , type_ "submit"
+                                    , Html.Attributes.value "Run"
+                                    ]
+                                    []
                                 , label
                                     []
                                     [ input
@@ -335,9 +453,22 @@ view model =
                             ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
 
 
+radio : String -> Bool -> a -> Html a
+radio value isChecked msg =
+    label []
+        [ input
+            [ type_ "radio"
+            , checked isChecked
+            , Html.Events.onClick msg
+            ]
+            []
+        , text value
+        ]
+
+
 viewPreview : ProgramData -> Html a
-viewPreview { command, stats, prof, eventlog } =
-    case command of
+viewPreview data =
+    case data.command of
         "" ->
             text ""
 
@@ -345,55 +476,90 @@ viewPreview { command, stats, prof, eventlog } =
             let
                 flags =
                     List.concat
-                        [ if stats then
-                            [ "-S" ]
+                        [ if String.isEmpty data.nurserySize then
+                            []
+                          else
+                            [ "-A" ++ data.nurserySize ]
+                        , if String.isEmpty data.largeObjectSize then
+                            []
+                          else
+                            [ "-AL" ++ data.largeObjectSize ]
+                        , if data.compaction then
+                            [ "-c" ]
                           else
                             []
-                        , if prof then
+                        , if String.isEmpty data.oldGenFactor then
+                            []
+                          else
+                            [ "-F" ++ data.oldGenFactor ]
+                        , if String.isEmpty data.nurseryChunks then
+                            []
+                          else
+                            [ "-n" ++ data.nurseryChunks ]
+                        , if String.isEmpty data.oldGenMinSize then
+                            []
+                          else
+                            [ "-o" ++ data.oldGenMinSize ]
+                        , if data.eventlog then
+                            [ "-l" ]
+                          else
+                            []
+                        , if data.prof then
                             [ "-pa" ]
                           else
                             []
-                        , if eventlog then
-                            [ "-l" ]
+                        , if data.stats then
+                            [ "-S" ]
                           else
                             []
                         ]
             in
-                case flags of
-                    [] ->
-                        text command
-
-                    _ ->
-                        text <| String.join " " <| command :: "+RTS" :: List.sort flags
+                if List.isEmpty flags then
+                    text data.command
+                else
+                    text <|
+                        String.join " " <|
+                            data.command
+                                :: "+RTS"
+                                :: flags
 
 
 viewFlagsRequired : ProgramData -> Html a
-viewFlagsRequired { prof, eventlog } =
+viewFlagsRequired data =
     let
         flags : List String
         flags =
             List.concat
-                [ if eventlog then
+                [ if data.eventlog then
                     [ "-eventlog" ]
                   else
                     []
-                , if prof then
+                , if data.prof then
                     [ "-prof" ]
                   else
                     []
+                , if
+                    String.isEmpty data.nurserySize
+                        && String.isEmpty data.nurseryChunks
+                        && String.isEmpty data.largeObjectSize
+                        && String.isEmpty data.oldGenMinSize
+                        && String.isEmpty data.oldGenFactor
+                        && not data.compaction
+                  then
+                    []
+                  else
+                    [ "-rtsopts" ]
                 ]
     in
-        case flags of
-            [] ->
-                text ""
-
-            _ ->
-                div [ class "flags-required" ]
-                    [ span [ class "flags-required__preface" ]
-                        [ text "Note: your program must be compiled with: " ]
-                    , span [ class "flags-required__flags" ]
-                        [ text <| String.join " " flags ]
-                    ]
+        if List.isEmpty flags then
+            text ""
+        else
+            div [ class "flags-required" ]
+                [ span [ class "flags-required__preface" ]
+                    [ text "Note: your program must be compiled with: " ]
+                , span [ class "flags-required__flags" ]
+                    [ text <| String.join " " flags ]
+                ]
 
 
 viewStats : List GCStats -> Html msg
