@@ -3,6 +3,7 @@
 --
 -- If any thread throws an exception, all other threads are killed, then the
 -- supervisor re-throws the original exception.
+
 module Daffy.Supervisor
   ( Supervisor
   , new
@@ -36,6 +37,6 @@ wait (Supervisor ref) = io $ do
       waitCatch w >>= \case
         Left ex -> do
           mapM_ cancel ws
-          throwIO ex
+          throw ex
         Right () ->
           go ws

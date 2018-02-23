@@ -8,6 +8,7 @@ module Prelude
   , identity
   , io
   , putStrLn
+  , throw
   ) where
 
 import Control.Applicative as X
@@ -34,11 +35,11 @@ import Debug.Trace as X
 import GHC.Generics as X (Generic)
 import GHC.TypeLits as X (KnownSymbol, Symbol, symbolVal')
 import "base" Prelude as X hiding (String, id, log, putStrLn)
-import System.IO as X (Handle, stderr, withFile)
+import System.IO as X (Handle, stderr)
 import System.Exit as X (ExitCode(..), exitFailure)
 import Text.Read as X (readMaybe)
 import UnliftIO as X
-  (MonadUnliftIO, catch, catchAny, finally, throwIO, try, tryAny)
+  (MonadUnliftIO, catch, catchAny, finally, try, tryAny, withFile)
 import UnliftIO.Concurrent as X (forkIO, threadDelay)
 
 import System.IO.Unsafe (unsafePerformIO)
@@ -48,6 +49,7 @@ import qualified Data.ByteString.Streaming
 import qualified Data.List.NonEmpty
 import qualified "base" Prelude
 import qualified System.IO
+import qualified UnliftIO
 
 type LByteString
   = Data.ByteString.Lazy.ByteString
@@ -74,11 +76,15 @@ io :: MonadIO m => IO a -> m a
 io =
   liftIO
 
-putStrLn :: MonadIO m => [Char] -> m ()
-putStrLn =
-  liftIO . withMVar iolock . const . System.IO.putStrLn
-
 iolock :: MVar ()
 iolock =
   unsafePerformIO (newMVar ())
 {-# NOINLINE iolock #-}
+
+putStrLn :: MonadIO m => [Char] -> m ()
+putStrLn =
+  liftIO . withMVar iolock . const . System.IO.putStrLn
+
+throw :: (Exception e, MonadIO m) => e -> m a
+throw =
+  UnliftIO.throwIO

@@ -183,7 +183,7 @@ recvRequest conn = do
 
   case Aeson.eitherDecode blob of
     Left err ->
-      throwIO (RequestParseException blob err)
+      throw (RequestParseException blob err)
 
     Right request ->
       pure request
@@ -201,7 +201,7 @@ handleRunRequest conn request = do
       rundir =
         progname </> show now
 
-  v2 ("Run dir: " ++ rundir)
+  v1 ("Run dir: " ++ daffydir </> rundir)
 
   io (createDirectoryIfMissing True (daffydir </> rundir))
 
@@ -210,6 +210,10 @@ handleRunRequest conn request = do
   -- more data).
   supervisor :: Supervisor <-
     Supervisor.new
+
+  let spawn :: MonadIO m => IO () -> m ()
+      spawn =
+        Supervisor.spawn supervisor
 
   let eventlog :: FilePath
       eventlog =
@@ -233,8 +237,7 @@ handleRunRequest conn request = do
     -- Truncate the old eventlog (if any)
     io (withFile eventlog WriteMode (const (pure ())))
 
-    Supervisor.spawn
-      supervisor
+    spawn
       (runManaged
         (Streaming.mapM_ (sendResponse conn) (Eventlog.stream eventlog)))
 #endif
@@ -273,10 +276,6 @@ handleRunRequest conn request = do
     waitExitCode process
   v1 (show code)
 
-  -- Wait for background threads forwarding stdout, stderr, and possibly the
-  -- eventlog, to finish sending data.
-  Supervisor.wait supervisor
-
   -- We can't have GHC write to a custom eventlog destination, so just crudely
   -- move it after the process is done.
   let eventlog' :: FilePath
@@ -288,14 +287,14 @@ handleRunRequest conn request = do
 
   -- If we didn't stream the eventlog, send all of the events out now.
 #ifndef INOTIFY
-  when (RunReq.eventlog request) $ do
+  when (RunReq.eventlog request) $
     io (tryAny (GHC.readEventLogFromFile eventlog')) >>= \case
-      Left _ ->
-        v2 (eventlog' ++ " not found")
+      Left ex ->
+        v2 (eventlog' ++ " not found: " ++ show ex)
       Right (Left err) ->
-        io (throwIO (EventlogParseException err eventlog'))
+        throw (EventlogParseException err eventlog')
       Right (Right (GHC.dat -> GHC.Data events)) ->
-        forM_ events (sendResponse conn)
+        spawn (forM_ events (sendResponse conn))
 #endif
 
   -- Send a big hunk of stats.
@@ -304,23 +303,23 @@ handleRunRequest conn request = do
       Left ex ->
         v2 (statsfile ++ " not found: " ++ show ex)
       Right bytes ->
-        -- Drop a line, because when directing -S output to a file, the command
-        -- invocation is written at the top.
+        -- Drop a line, because when directing -S output to a file, the
+        -- command invocation is written at the top.
         case Stats.parse (Text.dropWhile (/= '\n') bytes) of
           Left err ->
-            io (throwIO (StatsParseException err statsfile))
+            throw (StatsParseException err statsfile)
           Right stats ->
-            sendResponse conn stats
+            spawn (sendResponse conn stats)
 
   -- Send time and alloc flamegraph paths
-  when (RunReq.prof request) $ do
+  when (RunReq.prof request) $
     io (tryAny (LByteString.readFile proffile)) >>= \case
       Left ex ->
         v2 (proffile ++ " not found: " ++ show ex)
       Right bytes ->
         case Profile.parse bytes of
           Left err ->
-            io (throwIO (ProfileParseException err proffile))
+            throw (ProfileParseException err proffile)
 
           Right prof -> do
             let ticks_entries :: [Text]
@@ -328,44 +327,57 @@ handleRunRequest conn request = do
                   Profile.ticksFlamegraph prof
 
             unless (null ticks_entries) $ do
-              io (withFile (daffydir </> rundir </> "ticks.svg") WriteMode $ \h -> do
-                let cmd :: [Char]
-                    cmd =
-                      "perl " ++ flamegraph ++ " --title '" ++ progname
-                        ++ " (ticks)' " ++ "--countname ticks "
-                        ++ "--nametype 'Cost center:' " ++ "--colors hot"
+              let outfile :: FilePath
+                  outfile =
+                    daffydir </> rundir </> "ticks.svg"
 
-                v2 ("Running: " ++ cmd)
+              spawn $ do
+                withFile outfile WriteMode $ \h -> do
+                  let cmd :: [Char]
+                      cmd =
+                        "perl " ++ flamegraph ++ " --title '" ++ progname
+                          ++ " (ticks)' " ++ "--countname ticks "
+                          ++ "--nametype 'Cost center:' " ++ "--colors hot"
 
-                runProcess_
-                  (shell cmd
-                    & setStdin (byteStringInput (linesInput ticks_entries))
-                    & setStdout (useHandleClose h)))
+                  v2 ("Running: " ++ cmd)
 
-              sendResponse conn
-                (FlamegraphResp (pack (daffydir </> rundir </> "ticks.svg")))
+                  runProcess_
+                    (shell cmd
+                      & setStdin (byteStringInput (linesInput ticks_entries))
+                      & setStdout (useHandleClose h))
+
+                sendResponse conn
+                  (FlamegraphResp (pack (daffydir </> rundir </> "ticks.svg")))
 
             let bytes_entries :: [Text]
                 bytes_entries =
                   Profile.allocFlamegraph prof
 
             unless (null bytes_entries) $ do
-              io (withFile (daffydir </> rundir </> "bytes.svg") WriteMode $ \h -> do
-                let cmd :: [Char]
-                    cmd =
-                      "perl " ++ flamegraph ++ " --title '" ++ progname
-                        ++ " (bytes)' " ++ "--countname bytes "
-                        ++ "--nametype 'Cost center:' " ++ "--colors hot"
+              let outfile :: FilePath
+                  outfile =
+                    daffydir </> rundir </> "bytes.svg"
 
-                v2 ("Running: " ++ cmd)
+              spawn $ do
+                io (withFile outfile WriteMode $ \h -> do
+                  let cmd :: [Char]
+                      cmd =
+                        "perl " ++ flamegraph ++ " --title '" ++ progname
+                          ++ " (bytes)' " ++ "--countname bytes "
+                          ++ "--nametype 'Cost center:' " ++ "--colors hot"
 
-                runProcess_
-                  (shell cmd
-                    & setStdin (byteStringInput (linesInput bytes_entries))
-                    & setStdout (useHandleClose h)))
+                  v2 ("Running: " ++ cmd)
 
-              sendResponse conn
-                (FlamegraphResp (pack (daffydir </> rundir </> "bytes.svg")))
+                  runProcess_
+                    (shell cmd
+                      & setStdin (byteStringInput (linesInput bytes_entries))
+                      & setStdout (useHandleClose h)))
+
+                sendResponse conn
+                  (FlamegraphResp (pack (daffydir </> rundir </> "bytes.svg")))
+
+  -- Wait for background threads before sending final exit code.
+  Supervisor.wait supervisor
 
   sendResponse conn
     (ExitCodeResp
@@ -379,10 +391,10 @@ streamOutput
   :: (Given V, MonadIO m)
   => WebSockets.Connection -> Supervisor -> Process () Handle Handle -> m ()
 streamOutput conn supervisor process = do
-  Supervisor.spawn supervisor
-    (worker (getStdout process) True `catchAny` \_ -> pure ())
-  Supervisor.spawn supervisor
-    (worker (getStderr process) False `catchAny` \_ -> pure ())
+  Supervisor.spawn supervisor $
+    worker (getStdout process) True `catchAny` \_ -> pure ()
+  Supervisor.spawn supervisor $
+    worker (getStderr process) False `catchAny` \_ -> pure ()
  where
   worker :: Handle -> Bool -> IO a
   worker handle out =
