@@ -106,7 +106,7 @@ rules stack = do
 
   "bin/daffy-elm-codegen" %> \_ -> do
     files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
-    need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
+    need (".shake/.gitmodules" : "stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
     cmd_ "mkdir -p daffy-server/codegen"
     cmd_ "touch daffy-server/codegen/daffy.js"
     stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
