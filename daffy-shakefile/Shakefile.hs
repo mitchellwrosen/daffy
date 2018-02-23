@@ -59,7 +59,10 @@ rules stack = do
   want
     [ ".shake/.gitmodules"
     , "bin/daffy"
+    , "bin/daffy-elm-codegen"
     , "bin/Shakefile"
+    , "daffy-client/codegen/DaffyTypes.elm"
+    , "daffy-server/codegen/daffy.js"
     ]
 
   phony "clean" $ do
