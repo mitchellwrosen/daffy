@@ -283,6 +283,7 @@ view model =
                                     ]
                                     []
                                 ]
+                            , viewPreview model_
                             , div [ class "form-group" ]
                                 [ input [ class "btn", type_ "submit", Html.Attributes.value "Run" ] []
                                 , label
@@ -317,7 +318,7 @@ view model =
                                     ]
                                 ]
                             ]
-                        , Html.map never <| viewFlagsRequired model_
+                        , viewFlagsRequired model_
                         ]
 
                     RunningProgram programData programOutput ->
@@ -334,43 +335,65 @@ view model =
                             ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
 
 
-type Flag
-    = Stats
-    | Prof
-    | EventLog
+viewPreview : ProgramData -> Html a
+viewPreview { command, stats, prof, eventlog } =
+    case command of
+        "" ->
+            text ""
+
+        _ ->
+            let
+                flags =
+                    List.concat
+                        [ if stats then
+                            [ "-S" ]
+                          else
+                            []
+                        , if prof then
+                            [ "-pa" ]
+                          else
+                            []
+                        , if eventlog then
+                            [ "-l" ]
+                          else
+                            []
+                        ]
+            in
+                case flags of
+                    [] ->
+                        text command
+
+                    _ ->
+                        text <| String.join " " <| command :: "+RTS" :: List.sort flags
 
 
-flagToString : Flag -> String
-flagToString flag =
-    case flag of
-        Stats ->
-            "--Foo"
-
-        Prof ->
-            "--Baz"
-
-        EventLog ->
-            "--Bar"
-
-
-viewFlagsRequired : ProgramData -> Html Never
-viewFlagsRequired { stats, prof, eventlog } =
+viewFlagsRequired : ProgramData -> Html a
+viewFlagsRequired { prof, eventlog } =
     let
+        flags : List String
         flags =
-            [ ( Stats, stats ), ( Prof, prof ), ( EventLog, eventlog ) ]
-                |> List.filter Tuple.second
-                |> List.map (Tuple.first >> flagToString)
-                |> String.join " "
-
-        preface =
-            "Note: Your program must be compiled with these flags: "
+            List.concat
+                [ if eventlog then
+                    [ "-eventlog" ]
+                  else
+                    []
+                , if prof then
+                    [ "-prof" ]
+                  else
+                    []
+                ]
     in
-        div [ class "flags-required" ]
-            [ span [ class "flags-required__preface" ]
-                [ text preface ]
-            , span [ class "flags-required__flags" ]
-                [ text flags ]
-            ]
+        case flags of
+            [] ->
+                text ""
+
+            _ ->
+                div [ class "flags-required" ]
+                    [ span [ class "flags-required__preface" ]
+                        [ text "Note: your program must be compiled with: " ]
+                    , span [ class "flags-required__flags" ]
+                        [ text <| String.join " " flags ]
+                    ]
 
 
 viewStats : List GCStats -> Html msg
