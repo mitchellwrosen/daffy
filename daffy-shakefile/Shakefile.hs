@@ -6,7 +6,7 @@ import Control.Concurrent (newChan, readChan)
 import Control.Exception (SomeAsyncException(SomeAsyncException), fromException, throwIO, try)
 import Data.Functor (void)
 import Development.Shake
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
+import System.Directory (getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
 import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
@@ -99,25 +99,16 @@ rules stack = do
       _ -> writeFile' out ""
 
   "bin/daffy" %> \_ -> do
-    -- Require "daffy.js" to be built before building the server, but don't
-    -- actually add it as a dependency, because (in development mode) we don't
-    -- need to rebuild the server if "daffy.js" changes.
-    doesFileExist "daffy-server/codegen/daffy.js" >>= \case
-      False -> do
-        -- Touch the file because in order to build "daffy.js", we need to build
-        -- and run 'daffy-elm-codegen', which will build 'daffy' the library,
-        -- which will require "daffy.js" to exist (it's a data-file).
-        liftIO (createDirectoryIfMissing False "daffy-server/codegen")
-        liftIO (appendFile "daffy-server/codegen/daffy.js" "")
-      True -> pure ()
     orderOnly ["daffy-server/codegen/daffy.js"]
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
-    need ("stack.yaml" : "daffy-server/daffy.cabal" : files)
+    need (".shake/.gitmodules" : "stack.yaml" : "daffy-server/daffy.cabal" : files)
     stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
 
   "bin/daffy-elm-codegen" %> \_ -> do
     files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
     need ("stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
+    cmd_ "mkdir -p daffy-server/codegen"
+    cmd_ "touch daffy-server/codegen/daffy.js"
     stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
 
   "bin/Shakefile" %> \_ -> do
@@ -130,5 +121,5 @@ rules stack = do
 
   "daffy-server/codegen/daffy.js" %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
-    need (".shake/elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
+    need (".shake/.gitmodules" : ".shake/elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
     cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)
