@@ -29,24 +29,76 @@
       .heading {
         text-align: center;
         font-size: 48px;
+        margin-top: 48px;
         color: tomato;
       }
 
       .command-form {
         font-size: 24px;
-        font-family: Consolas, "Andale Mono WT", "Andale Mono", "Lucida Console", "Lucida Sans Typewriter", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Nimbus Mono L", Monaco, "Courier New", Courier, monospace;
+      }
+
+      .command-form label {
+        display: block;
+        line-height: 2.0;
+      }
+
+      .command-form input {
+        border: none;
+        font-family: inherit;
+        color: inherit;
+      }
+
+      .command-form fieldset {
+        display: inline-block;
+        border: none;
+        padding: 0;
+        margin: 0 12px;
+      }
+
+      .command-form fieldset label {
+        display: inline-block;
+      }
+
+      .command-form input[type="radio"] {
+        display: none;
+      }
+
+      .command-form input[type="radio"] + label {
+        border: 2px solid transparent;
+        border-radius: 3px;
+        padding: 0 12px;
+        cursor: pointer;
+      }
+
+      .command-form input[type="radio"]:checked + label {
+        border-color: tomato;
       }
 
       .form-group {
         margin: 18px 0;
       }
 
-      .prompt-group {
+      .form-group input {
+        border-bottom: 2px solid tomato;
+      }
+
+      .form-pair {
         display: flex;
+      }
+
+      .form-pair .form-group {
+        width: 50%;
+      }
+
+      .prompt-group,
+      .command-preview {
+        display: flex;
+        font-family: Consolas, "Andale Mono WT", "Andale Mono", "Lucida Console", "Lucida Sans Typewriter", "DejaVu Sans Mono", "Bitstream Vera Sans Mono", "Liberation Mono", "Nimbus Mono L", Monaco, "Courier New", Courier, monospace;
       }
 
       .prompt-group input {
         width: 100%;
+        border: none;
       }
 
       .ps1 {
@@ -57,13 +109,24 @@
         font-size: inherit;
       }
 
-      .command-form input[type="text"] {
-        border: none;
-        font-family: inherit;
-        color: inherit;
+      .command-form .inline-label {
+        display: inline-block;
+        white-space: nowrap;
       }
 
-      .btn {
+      .command-form .inline-label + .inline-label {
+        margin-left: 18px;
+      }
+
+      .command-form input + .inline-label {
+        margin: 0 8px;
+      }
+
+      input.tiny {
+        width: 1.5em;
+      }
+
+      .command-form .btn {
         color: white;
         background: tomato;
         border: 2px solid tomato;
@@ -73,7 +136,7 @@
         margin-right: 18px;
       }
 
-      .btn:active {
+      .command-form .btn:active {
         transform: translate(1px, 1px);
       }
 

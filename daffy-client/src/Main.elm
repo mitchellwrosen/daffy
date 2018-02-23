@@ -325,87 +325,88 @@ view model =
                                     ]
                                     []
                                 ]
-                            , div [ class "form-group prompt-group" ]
-                                [ span
-                                    [ class "ps1" ]
-                                    [ text "Nursery size:" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.placeholder "1m"
-                                    , Html.Attributes.value model_.nurserySize
-                                    , Html.Events.onInput TypeNurserySize
-                                    ]
-                                    []
-                                , span
-                                    [ class "ps1" ]
-                                    [ text "split into" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.value model_.nurseryChunks
-                                    , Html.Events.onInput TypeNurseryChunks
-                                    ]
-                                    []
-                                , span [ class "ps1" ] [ text "chunks" ]
-                                ]
-                            , div [ class "form-group prompt-group" ]
-                                [ span
-                                    [ class "ps1" ]
-                                    [ text "Large object size:" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.placeholder <|
-                                        if String.isEmpty model_.nurserySize then
-                                            "1m"
-                                        else
-                                            model_.nurserySize
-                                    , Html.Attributes.value model_.largeObjectSize
-                                    , Html.Events.onInput TypeLargeObjectSize
-                                    ]
-                                    []
-                                ]
-                            , div [ class "form-group prompt-group" ]
-                                [ span
-                                    [ class "ps1" ]
-                                    [ text "Minimum old generation size:" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.placeholder "1m"
-                                    , Html.Attributes.value model_.oldGenMinSize
-                                    , Html.Events.onInput TypeOldGenMinSize
-                                    ]
-                                    []
-                                ]
-                            , div [ class "form-group prompt-group" ]
-                                [ span
-                                    [ class "ps1" ]
-                                    [ text "Old generation factor:" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.placeholder "2"
-                                    , Html.Attributes.value model_.oldGenFactor
-                                    , Html.Events.onInput TypeOldGenFactor
-                                    ]
-                                    []
-                                ]
-                            , div [ class "form-group prompt-group" ]
-                                [ span
-                                    [ class "ps1" ]
-                                    [ text "Collect oldest generation by:" ]
-                                , fieldset []
-                                    [ radio "Copying" (model_.compaction == False) (ToggleCompaction False)
-                                    , radio "Compacting" (model_.compaction == True) (ToggleCompaction True)
-                                    ]
-                                ]
                             , viewPreview model_
-                            , div [ class "form-group" ]
-                                [ input
-                                    [ class "btn"
-                                    , type_ "submit"
-                                    , Html.Attributes.value "Run"
+                            , div [ class "form-pair" ]
+                                [ div [ class "form-group" ]
+                                    [ label
+                                        []
+                                        [ text "Nursery size" ]
+                                    , input
+                                        [ class "tiny"
+                                        , type_ "text"
+                                        , Html.Attributes.placeholder "1m"
+                                        , Html.Attributes.value model_.nurserySize
+                                        , Html.Events.onInput TypeNurserySize
+                                        ]
+                                        []
+                                    , span
+                                        [ class "inline-label" ]
+                                        [ text "split into" ]
+                                    , input
+                                        [ class "tiny"
+                                        , type_ "text"
+                                        , Html.Attributes.value model_.nurseryChunks
+                                        , Html.Events.onInput TypeNurseryChunks
+                                        ]
+                                        []
+                                    , span [ class "inline-label" ]
+                                        [ text "chunks" ]
                                     ]
-                                    []
-                                , label
-                                    []
+                                , div [ class "form-group" ]
+                                    [ label
+                                        []
+                                        [ text "Large object size" ]
+                                    , input
+                                        [ type_ "text"
+                                        , Html.Attributes.placeholder <|
+                                            if String.isEmpty model_.nurserySize then
+                                                "1m"
+                                            else
+                                                model_.nurserySize
+                                        , Html.Attributes.value model_.largeObjectSize
+                                        , Html.Events.onInput TypeLargeObjectSize
+                                        ]
+                                        []
+                                    ]
+                                ]
+                            , div [ class "form-pair" ]
+                                [ div [ class "form-group" ]
+                                    [ label
+                                        []
+                                        [ text "Minimum old generation size" ]
+                                    , input
+                                        [ type_ "text"
+                                        , Html.Attributes.placeholder "1m"
+                                        , Html.Attributes.value model_.oldGenMinSize
+                                        , Html.Events.onInput TypeOldGenMinSize
+                                        ]
+                                        []
+                                    ]
+                                , div [ class "form-group" ]
+                                    [ label
+                                        []
+                                        [ text "Old generation factor" ]
+                                    , input
+                                        [ type_ "text"
+                                        , Html.Attributes.placeholder "2"
+                                        , Html.Attributes.value model_.oldGenFactor
+                                        , Html.Events.onInput TypeOldGenFactor
+                                        ]
+                                        []
+                                    ]
+                                ]
+                            , div [ class "form-group" ]
+                                [ span
+                                    [ class "inline-label" ]
+                                    [ text "Collect oldest generation by" ]
+                                , fieldset []
+                                    ((radio "Copying" (model_.compaction == False) (ToggleCompaction False))
+                                        ++ (radio "Compacting" (model_.compaction == True) (ToggleCompaction True))
+                                    )
+                                ]
+                            , div [ class "form-group" ]
+                                [ label
+                                    [ class "inline-label" ]
                                     [ input
                                         [ type_ "checkbox"
                                         , Html.Events.onCheck ToggleStats
@@ -415,7 +416,7 @@ view model =
                                     , text "stats"
                                     ]
                                 , label
-                                    []
+                                    [ class "inline-label" ]
                                     [ input
                                         [ type_ "checkbox"
                                         , Html.Events.onCheck ToggleProf
@@ -425,7 +426,7 @@ view model =
                                     , text "profile"
                                     ]
                                 , label
-                                    []
+                                    [ class "inline-label" ]
                                     [ input
                                         [ type_ "checkbox"
                                         , Html.Events.onCheck ToggleEventlog
@@ -434,6 +435,14 @@ view model =
                                         []
                                     , text "eventlog"
                                     ]
+                                ]
+                            , div [ class "form-group" ]
+                                [ input
+                                    [ class "btn"
+                                    , type_ "submit"
+                                    , Html.Attributes.value "Run"
+                                    ]
+                                    []
                                 ]
                             ]
                         , viewFlagsRequired model_
@@ -453,16 +462,22 @@ view model =
                             ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
 
 
-radio : String -> Bool -> a -> Html a
+radio : String -> Bool -> a -> List (Html a)
 radio value isChecked msg =
-    label []
+    let
+        id =
+            "radio-" ++ value
+    in
         [ input
             [ type_ "radio"
             , checked isChecked
             , Html.Events.onClick msg
+            , Html.Attributes.id id
             ]
             []
-        , text value
+        , label [ Html.Attributes.for id ]
+            [ text value
+            ]
         ]
 
 
@@ -514,14 +529,16 @@ viewPreview data =
                             []
                         ]
             in
-                if List.isEmpty flags then
-                    text data.command
-                else
-                    text <|
-                        String.join " " <|
-                            data.command
-                                :: "+RTS"
-                                :: flags
+                div [ class "command-preview" ]
+                    [ if List.isEmpty flags then
+                        text data.command
+                      else
+                        text <|
+                            String.join " " <|
+                                data.command
+                                    :: "+RTS"
+                                    :: flags
+                    ]
 
 
 viewFlagsRequired : ProgramData -> Html a
