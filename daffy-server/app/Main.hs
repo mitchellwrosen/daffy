@@ -1,5 +1,4 @@
 {-# language CPP             #-}
-{-# language MagicHash       #-}
 {-# language TemplateHaskell #-}
 
 {-# options_ghc -fno-warn-orphans #-}
@@ -18,23 +17,23 @@ import Paths_daffy (getDataDir)
 import qualified Daffy.Eventlog as Eventlog
 #endif
 import qualified Daffy.Profile as Profile
-import qualified Daffy.Proto.RunReq as RunReq
 import qualified Daffy.Proto.OutputResp as OutputResp
+import qualified Daffy.Proto.Response as Response
+import qualified Daffy.Proto.RunReq as RunReq
 import qualified Daffy.Stats as Stats
 import qualified Daffy.Supervisor as Supervisor
 
-import Data.Aeson (ToJSON, Value, (.=))
+import Data.Aeson (ToJSON)
 import Data.List (intersperse)
 import Data.Reflection (Given, given, give)
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import GHC.Prim (proxy#)
 import Network.HTTP.Types.Header (hContentType)
 import Network.HTTP.Types.Status (status200, status404, statusCode)
 import Network.Wai.Handler.WebSockets (websocketsOr)
 import System.Directory
   (createDirectoryIfMissing, getCurrentDirectory, renameFile)
 import System.FilePath ((</>), (<.>), takeFileName)
-import System.IO (IOMode(WriteMode))
+import System.IO (IOMode(WriteMode), withBinaryFile)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process.Typed
 
@@ -268,8 +267,8 @@ handleRunRequest conn request = do
           & setStdout createPipe
           & setStderr createPipe))
 
-  -- Asynchronously stream stdout and stderr.
-  streamOutput conn supervisor process
+  -- Asynchronously stream stdout and stderr, and also save it to a file.
+  streamOutput rundir conn supervisor process
 
   -- Wait for the process to terminate.
   code :: ExitCode <-
@@ -388,23 +387,45 @@ handleRunRequest conn request = do
           n))
 
 streamOutput
-  :: (Given V, MonadIO m)
-  => WebSockets.Connection -> Supervisor -> Process () Handle Handle -> m ()
-streamOutput conn supervisor process = do
+  :: FilePath
+  -> WebSockets.Connection
+  -> Supervisor
+  -> Process () Handle Handle
+  -> Managed ()
+streamOutput rundir conn supervisor process = do
+  handle :: Handle <-
+    managed (withBinaryFile (daffydir </> rundir </> "output") WriteMode)
+
+  lock :: MVar () <-
+    io (newMVar ())
+
+  let logLine :: OutputResp -> IO ()
+      logLine line =
+        withMVar lock $ \_ -> do
+          LByteString.hPut handle (Aeson.encode line)
+          LByteString.hPut handle (LByteString.singleton 10)
+
   Supervisor.spawn supervisor $
-    worker (getStdout process) True `catchAny` \_ -> pure ()
+    worker logLine (getStdout process) True `catchAny` \_ -> pure ()
+
   Supervisor.spawn supervisor $
-    worker (getStderr process) False `catchAny` \_ -> pure ()
+    worker logLine (getStderr process) False `catchAny` \_ -> pure ()
  where
-  worker :: Handle -> Bool -> IO a
-  worker handle out =
+  worker :: (OutputResp -> IO ()) -> Handle -> Bool -> IO a
+  worker logLine handle out =
     forever $ do
       line :: Text <-
         Text.hGetLine handle
-      sendResponse conn OutputResp
-        { OutputResp.line = line
-        , OutputResp.stdout = out
-        }
+
+      let response :: OutputResp
+          response =
+            OutputResp
+              { OutputResp.line = line
+              , OutputResp.stdout = out
+              }
+
+      sendResponse conn response
+      logLine response
 
 linesInput :: [Text] -> LByteString
 linesInput =
@@ -415,22 +436,10 @@ linesInput =
 
 sendResponse
   :: forall a m.
-     (Given V, KnownSymbol (Response a), ToJSON a, MonadIO m)
+     (KnownSymbol (Response a), ToJSON a, MonadIO m)
   => WebSockets.Connection -> a -> m ()
 sendResponse conn response =
-  sendText conn (Aeson.encode blob)
- where
-  blob :: Value
-  blob =
-    Aeson.object
-      [ "type" .= symbolVal' @(Response a) proxy#
-      , "payload" .= response
-      ]
-
-sendText :: (Given V, MonadIO m) => WebSockets.Connection -> LByteString -> m ()
-sendText conn msg = do
-  v3 ("SEND " ++ unpack (decodeUtf8 (LByteString.toStrict msg)))
-  io (WebSockets.sendTextData conn msg)
+  io (WebSockets.sendTextData conn (Response.json response))
 
 --------------------------------------------------------------------------------
 -- Data files
@@ -454,19 +463,16 @@ flamegraph =
 -- V0: Messages to show no matter what
 -- V1: Log some noteworthy actions, such as clients connecting
 -- V2: Very verbosely log almost every little action the program is doing
--- V3: Also log all communication with the client
 data V
   = V0
   | V1
   | V2
-  | V3
   deriving (Eq, Ord)
 
-v0, v1, v2, v3 :: (Given V, MonadIO m) => [Char] -> m ()
+v0, v1, v2 :: (Given V, MonadIO m) => [Char] -> m ()
 v0 = vv V0
 v1 = vv V1
 v2 = vv V2
-v3 = vv V3
 
 vv :: (Given V, MonadIO m) => V -> [Char] -> m ()
 vv v =

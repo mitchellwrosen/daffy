@@ -101,18 +101,32 @@ rules stack = do
   "bin/daffy" %> \_ -> do
     orderOnly ["daffy-server/codegen/daffy.js"]
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
-    need (".shake/.gitmodules" : "stack.yaml" : "daffy-server/daffy.cabal" : files)
+    need
+      ( ".shake/.gitmodules"
+      : "daffy-server/daffy.cabal"
+      : "stack.yaml"
+      : files
+      )
     stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
 
   "bin/daffy-elm-codegen" %> \_ -> do
     files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
-    need (".shake/.gitmodules" : "stack.yaml" : "daffy-elm-codegen/daffy-elm-codegen.cabal" : files)
+    need
+      ( ".shake/.gitmodules"
+      : "daffy-elm-codegen/daffy-elm-codegen.cabal"
+      : "stack.yaml"
+      : files
+      )
     cmd_ "mkdir -p daffy-server/codegen"
     cmd_ "touch daffy-server/codegen/daffy.js"
     stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
 
   "bin/Shakefile" %> \_ -> do
-    need ["stack.yaml", "daffy-shakefile/daffy-shakefile.cabal", "daffy-shakefile/Shakefile.hs"]
+    need
+      [ "daffy-shakefile/daffy-shakefile.cabal"
+      , "daffy-shakefile/Shakefile.hs"
+      , "stack.yaml"
+      ]
     stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
 
   "daffy-client/codegen/DaffyTypes.elm" %> \out -> do
@@ -121,5 +135,10 @@ rules stack = do
 
   "daffy-server/codegen/daffy.js" %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
-    need (".shake/.gitmodules" : ".shake/elm-package.json" : "daffy-client/codegen/DaffyTypes.elm" : files)
+    need
+      ( ".shake/.gitmodules"
+      : ".shake/elm-package.json"
+      : "daffy-client/codegen/DaffyTypes.elm"
+      : files
+      )
     cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)

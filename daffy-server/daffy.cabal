@@ -46,6 +46,7 @@ library
     , containers
     , daffy-prelude
     , ghc-events >= 0.7.1 && < 0.8
+    , ghc-prim
     , streaming
     , streaming-bytestring
     , text
@@ -72,6 +73,7 @@ library
     DataKinds
     DeriveGeneric
     DuplicateRecordFields
+    FlexibleContexts
     GeneralizedNewtypeDeriving
     InstanceSigs
     LambdaCase
@@ -80,6 +82,7 @@ library
     PartialTypeSignatures
     ScopedTypeVariables
     RecordWildCards
+    TypeApplications
     TypeFamilies
     TypeFamilyDependencies
   default-language: Haskell2010
@@ -119,7 +122,6 @@ executable daffy
     , daffy-prelude
     , filepath
     , ghc-events >= 0.7.1 && < 0.8
-    , ghc-prim
     , http-types
     , reflection
     , streaming
@@ -141,7 +143,6 @@ executable daffy
     ScopedTypeVariables
     StandaloneDeriving
     TupleSections
-    TypeApplications
     TypeFamilies
     ViewPatterns
   default-language: Haskell2010
