@@ -291,7 +291,7 @@ handleRunRequest conn request = do
       Left ex ->
         v2 (eventlog' ++ " not found: " ++ show ex)
       Right (Left err) ->
-        throw (EventlogParseException err eventlog')
+        throw (EventlogParseException eventlog')
       Right (Right (GHC.dat -> GHC.Data events)) ->
         spawn (forM_ events (sendResponse conn))
 #endif
