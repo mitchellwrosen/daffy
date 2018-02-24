@@ -1,6 +1,12 @@
 #!/bin/bash
 
 echo "module Daffy.Lenses exposing (..)"
+echo ""
+echo "over : ((a -> b) -> s -> t) -> (a -> b) -> s -> t"
+echo "over = identity"
+echo ""
+echo "set : ((a -> b) -> s -> t) -> b -> s -> t"
+echo "set l x = over l (always x)"
 
 while read S; do
   # Ignore whitespace
@@ -15,15 +21,9 @@ while read S; do
     continue
   fi
 
-  # For each line 'foo', generate an 'overFoo' and a 'setFoo'
+  # For each line 'foo', generate a 'fooL'.
 
   echo ""
-  echo "over${S^} : (a -> a) -> { r | $S : a } -> { r | $S : a }"
-  echo "over${S^} f x ="
-  echo "    { x | $S = f x.$S }"
-
-  echo ""
-  echo "set${S^} : a -> { r | $S : a } -> { r | $S : a }"
-  echo "set${S^} x s ="
-  echo "    { s | $S = x }"
+  echo "${S}L : (a -> b) -> { r | $S : a } -> { r | $S : b }"
+  echo "${S}L f x = { x | $S = f x.$S }"
 done

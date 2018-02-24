@@ -1,6 +1,14 @@
 # This module is used to generate:
 #
 #   daffy-client/codegen/Daffy/Lenses.elm
+#
+# As an example, the following line
+#
+#   foo
+#
+# would generate the following "lens":
+#
+#   fooL : (a -> b) -> { r | foo : a } -> { r | foo : b }
 
 command
 compaction

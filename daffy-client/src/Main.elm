@@ -142,61 +142,61 @@ update msg model =
     case ( model, msg ) of
         ( Initial model_, TypeCommand s ) ->
             model_
-                |> overRunSpec (setCommand s)
+                |> set (runSpecL << commandL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, TypeNurserySize s ) ->
             model_
-                |> overRunSpec (setNurserySize s)
+                |> set (runSpecL << nurserySizeL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, TypeNurseryChunks s ) ->
             model_
-                |> overRunSpec (setNurseryChunks s)
+                |> set (runSpecL << nurseryChunksL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, TypeLargeObjectSize s ) ->
             model_
-                |> overRunSpec (setLargeObjectSize s)
+                |> set (runSpecL << largeObjectSizeL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, TypeOldGenMinSize s ) ->
             model_
-                |> overRunSpec (setOldGenMinSize s)
+                |> set (runSpecL << oldGenMinSizeL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, TypeOldGenFactor s ) ->
             model_
-                |> overRunSpec (setOldGenFactor s)
+                |> set (runSpecL << oldGenFactorL) s
                 |> Initial
                 |> Step.to
 
         ( Initial model_, ToggleCompaction b ) ->
             model_
-                |> overRunSpec (setCompaction b)
+                |> set (runSpecL << compactionL) b
                 |> Initial
                 |> Step.to
 
         ( Initial model_, ToggleStats b ) ->
             model_
-                |> overRunSpec (setStats b)
+                |> set (runSpecL << statsL) b
                 |> Initial
                 |> Step.to
 
         ( Initial model_, ToggleProf b ) ->
             model_
-                |> overRunSpec (setProf b)
+                |> set (runSpecL << profL) b
                 |> Initial
                 |> Step.to
 
         ( Initial model_, ToggleEventlog b ) ->
             model_
-                |> overRunSpec (setEventlog b)
+                |> set (runSpecL << eventlogL) b
                 |> Initial
                 |> Step.to
 
