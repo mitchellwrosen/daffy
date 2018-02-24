@@ -3,15 +3,23 @@
 {-# language ViewPatterns #-}
 
 import Control.Concurrent (newChan, readChan)
-import Control.Exception (SomeAsyncException(SomeAsyncException), fromException, throwIO, try)
+import Control.Exception
+  (SomeAsyncException(SomeAsyncException), fromException, throwIO, try)
+import Control.Monad.IO.Class (MonadIO)
+import Data.Aeson
+  (Result(Error, Success), Value(Object), decodeStrict, fromJSON)
+import Data.ByteString (ByteString)
 import Data.Functor (void)
+import Data.HashMap.Strict (HashMap)
+import Data.Text (Text, pack)
 import Development.Shake
 import Development.Shake.FilePath
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
 import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
-
+import qualified Data.ByteString as ByteString (readFile)
+import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Set as Set (fromList)
 import qualified System.Info (os)
 
@@ -21,13 +29,14 @@ main =
     "watch":args ->
       withArgs args $ do
         -- Run 'shake' under a 'try', ignoring synchronous exceptions because
-        -- we don't care if it fails.
+        -- we don't care if the build fails - we want to watch & rebuild
+        -- regardless.
         try run >>= \case
           Left (fromException -> Just (SomeAsyncException ex)) -> throwIO ex
           _ -> pure ()
 
         -- Start watching the filesystem, and rebuild once some file that shake
-        -- considered alive changes (it writes these files to .shake/live).
+        -- considered alive changes (it writes these files to ".shake/live").
         cwd <- getCurrentDirectory
         files <- Set.fromList . map ((cwd ++) . ('/':)) . lines <$> readFile ".shake/live"
         withManager $ \manager -> do
@@ -35,7 +44,7 @@ main =
           void (watchTreeChan manager "." ((`elem` files) . eventPath) chan)
           void (readChan chan)
         env <- getEnvironment
-        executeFile "bin/Shakefile" False ("watch":args) (Just env)
+        executeFile shakefileExe False ("watch":args) (Just env)
     _ -> do
       run
  where
@@ -63,11 +72,7 @@ main =
 rules :: (forall a. Action a -> Action a) -> Rules ()
 rules stack = do
   -- The files we want to build, in no particular order.
-  want
-    [ "bin/daffy"
-    , "bin/Shakefile"
-    , "daffy-server/codegen/daffy.js"
-    ]
+  want [daffyExe, shakefileExe]
 
   phony "clean" $ do
     liftIO (removeFiles "bin" ["//"])
@@ -80,33 +85,46 @@ rules stack = do
     liftIO (removeFiles ".stack-work" ["//*"])
     liftIO (removeFiles "elm-stuff" ["//*"])
 
-  -- Whenever .gitmodules changes, recursively init/update all of them.
-  ".shake/.gitmodules" %> \out -> do
+  -- Whenever .gitmodules changes, recursively init/update all of them. So,
+  -- anything that has *some* submodule should just depend on
+  -- ".shake/.gitmodules" as an okay approximation.
+  gitmodulesStamp %> \out -> do
     need [".gitmodules"]
     cmd_ "git submodule update --init --recursive"
     writeFile' out ""
 
-  -- Whenever elm-package.json changes, run "elm package install --yes". If
-  -- something actually happened, update the modtime of .shake/elm-package.json.
-  ".shake/elm-package.json" %> \out -> do
+  -- Write dependencies from "elm-package.json" out to ".shake/elm-deps".
+  elmDeps %> \out -> do
     need ["elm-package.json"]
-    Stdout output <- cmd "elm package install --yes"
-    case output of
-      "Packages configured successfully!" -> pure ()
-      _ -> writeFile' out ""
+    deps <-
+      parseElmDependencies
+        =<< parseElmPackageJson
+        =<< liftIO (ByteString.readFile "elm-package.json")
+    writeFileChanged out (unlines (map show (HashMap.toList deps)))
 
-  "bin/daffy" %> \_ -> do
-    orderOnly ["daffy-server/codegen/daffy.js"]
+  -- Whenever the elm dependencies change, run 'elm package install'.
+  elmDepsStamp %> \out -> do
+    need [elmDeps]
+    cmd_ "elm package install --yes"
+    writeFile' out ""
+
+  daffyExe %> \_ -> do
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
-    need
-      ( "daffy-server/daffy.cabal"
-      : gitmodules
-      : stackYaml
-      : files
-      )
-    stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
 
-  "bin/generate-elm-types" %> \_ -> do
+    let deps =
+            "daffy-server/daffy.cabal"
+          : daffyJs
+          : gitmodulesStamp
+          : stackYaml
+          : files
+
+    -- It's only necessary to 'stack install' if something besides "daffy.js"
+    -- changed.
+    needHasChanged deps >>= \case
+      [file] | file == daffyJs -> pure ()
+      _ -> stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
+
+  generateElmTypesExe %> \_ -> do
     files <- getDirectoryFiles "" ["generate-elm-types/src//*.hs", "generate-elm-types/app/Main.hs"]
     need
       ( "generate-elm-types/generate-elm-types.cabal"
@@ -115,7 +133,7 @@ rules stack = do
       )
     stack (cmd_ "stack install --fast --local-bin-path bin generate-elm-types:exe:generate-elm-types")
 
-  "bin/Shakefile" %> \_ -> do
+  shakefileExe %> \_ -> do
     need
       [ "daffy-shakefile/daffy-shakefile.cabal"
       , "daffy-shakefile/Shakefile.hs"
@@ -124,32 +142,54 @@ rules stack = do
     stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
 
   "daffy-client/codegen/Daffy/Lenses.elm" %> \out -> do
-    let script = "generate-elm-lenses/generate-elm-lenses.sh"
     let stub = "daffy-client/src/Daffy/Lenses.elm.stub"
-    need [script, stub]
-    liftIO (createDirectoryIfMissing True (takeDirectory out))
-    cmd_ (FileStdin stub) (FileStdout out) script
+    need [generateElmLensesExe, stub]
+    mkdir (takeDirectory out)
+    cmd_ (FileStdin stub) (FileStdout out) generateElmLensesExe
 
   "daffy-client/codegen/Daffy/Types.elm" %> \out -> do
-    need ["bin/generate-elm-types"]
-    liftIO (createDirectoryIfMissing True (takeDirectory out))
-    cmd_ (FileStdout out) "bin/generate-elm-types"
+    need [generateElmTypesExe]
+    mkdir (takeDirectory out)
+    cmd_ (FileStdout out) generateElmTypesExe
 
-  "daffy-server/codegen/daffy.js" %> \out -> do
+  daffyJs %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
     need
-      ( ".shake/elm-package.json"
-      : "daffy-client/codegen/Daffy/Lenses.elm"
+      ( "daffy-client/codegen/Daffy/Lenses.elm"
       : "daffy-client/codegen/Daffy/Types.elm"
-      : gitmodules
+      : elmDepsStamp
+      : gitmodulesStamp
       : files
       )
     cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)
 
-gitmodules :: FilePath
-gitmodules =
-  ".shake/.gitmodules"
+parseElmPackageJson :: ByteString -> Action (HashMap Text Value)
+parseElmPackageJson bytes =
+  case decodeStrict bytes of
+    Just (Object o) -> pure o
+    _ -> fail "Failed to parse elm-package.json"
 
-stackYaml :: FilePath
-stackYaml =
-  "stack.yaml"
+parseElmDependencies :: HashMap Text Value -> Action (HashMap Text Text)
+parseElmDependencies blob =
+  case HashMap.lookup (pack "dependencies") blob of
+    Just value ->
+      case fromJSON value of
+        Success deps -> pure deps
+        Error s -> fail ("Failed to parse dependencies: " ++ s)
+    Nothing -> fail "Failed to parse elm-package.json: missing key 'dependencies'"
+
+-- Like 'mkdir -p'
+mkdir :: MonadIO m => FilePath -> m ()
+mkdir = liftIO . createDirectoryIfMissing True
+
+daffyExe, daffyJs, elmDeps, elmDepsStamp, generateElmLensesExe,
+  generateElmTypesExe, gitmodulesStamp, shakefileExe, stackYaml :: [Char]
+daffyExe             = "bin/daffy"
+daffyJs              = "daffy-server/codegen/daffy.js"
+elmDeps              = ".shake/elm-deps"
+elmDepsStamp         = ".shake/elm-deps.stamp"
+gitmodulesStamp      = ".shake/gitmodules.stamp"
+generateElmLensesExe = "generate-elm-lenses/generate-elm-lenses.sh"
+generateElmTypesExe  = "bin/generate-elm-types"
+shakefileExe         = "bin/Shakefile"
+stackYaml            = "stack.yaml"
