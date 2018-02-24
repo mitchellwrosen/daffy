@@ -1,9 +1,10 @@
 module Main exposing (..)
 
+import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
 import Daffy.Lenses exposing (..)
+import Daffy.List.Extra exposing (groupBy)
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
-
 import Array exposing (Array)
 import Color
 import Html exposing (..)
@@ -326,169 +327,142 @@ stepRunningProgram programRunMsg ({ output, stats, flamegraphs } as programOutpu
 
 view : Model -> Html Msg
 view model =
-    let
-        viewProgramOutput programData { output } =
-            div [ class "command-form" ]
-                (span [ class "ps1" ] [ text <| "$ " ++ programData.runSpec.command ]
-                    :: (output
-                            |> Array.toList
-                            |> List.map (p [] << List.singleton << text << .line)
-                       )
-                )
-    in
-        div [ class "container" ] <|
-            [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
-                ++ case model of
-                    Initial model_ ->
-                        [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
-                            [ div [ class "form-group prompt-group" ]
-                                [ span [ class "ps1" ] [ text "$" ]
-                                , input
-                                    [ type_ "text"
-                                    , Html.Attributes.autofocus True
-                                    , Html.Attributes.value model_.runSpec.command
-                                    , Html.Events.onInput TypeCommand
-                                    ]
+    div [ class "container" ] <|
+        [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
+            ++ case model of
+                Initial model_ ->
+                    [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
+                        [ div [ class "form-group prompt-group" ]
+                            [ span [ class "ps1" ] [ text "$" ]
+                            , textInput model_.runSpec.command
+                                TypeCommand
+                                [ Html.Attributes.autofocus True ]
+                            ]
+                        , viewPreview model_
+                        , div [ class "form-pair" ]
+                            [ div [ class "form-group" ]
+                                [ label
                                     []
-                                ]
-                            , viewPreview model_
-                            , div [ class "form-pair" ]
-                                [ div [ class "form-group" ]
-                                    [ label
-                                        []
-                                        [ text "Nursery size" ]
-                                    , input
-                                        [ class "tiny"
-                                        , type_ "text"
-                                        , Html.Attributes.placeholder "1m"
-                                        , Html.Attributes.value model_.runSpec.nurserySize
-                                        , Html.Events.onInput TypeNurserySize
-                                        ]
-                                        []
-                                    , span
-                                        [ class "inline-label" ]
-                                        [ text "split into" ]
-                                    , input
-                                        [ class "tiny"
-                                        , type_ "text"
-                                        , Html.Attributes.value model_.runSpec.nurseryChunks
-                                        , Html.Events.onInput TypeNurseryChunks
-                                        ]
-                                        []
-                                    , span [ class "inline-label" ]
-                                        [ text "chunks" ]
+                                    [ text "Nursery size" ]
+                                , textInput
+                                    model_.runSpec.nurserySize
+                                    TypeNurserySize
+                                    [ class "tiny"
+                                    , Html.Attributes.placeholder "1m"
                                     ]
-                                , div [ class "form-group" ]
-                                    [ label
-                                        []
-                                        [ text "Large object size" ]
-                                    , input
-                                        [ type_ "text"
-                                        , Html.Attributes.placeholder <|
-                                            if String.isEmpty model_.runSpec.nurserySize then
-                                                "1m"
-                                            else
-                                                model_.runSpec.nurserySize
-                                        , Html.Attributes.value model_.runSpec.largeObjectSize
-                                        , Html.Events.onInput TypeLargeObjectSize
-                                        ]
-                                        []
-                                    ]
-                                ]
-                            , div [ class "form-pair" ]
-                                [ div [ class "form-group" ]
-                                    [ label
-                                        []
-                                        [ text "Minimum old generation size" ]
-                                    , input
-                                        [ type_ "text"
-                                        , Html.Attributes.placeholder "1m"
-                                        , Html.Attributes.value model_.runSpec.oldGenMinSize
-                                        , Html.Events.onInput TypeOldGenMinSize
-                                        ]
-                                        []
-                                    ]
-                                , div [ class "form-group" ]
-                                    [ label
-                                        []
-                                        [ text "Old generation factor" ]
-                                    , input
-                                        [ type_ "text"
-                                        , Html.Attributes.placeholder "2"
-                                        , Html.Attributes.value model_.runSpec.oldGenFactor
-                                        , Html.Events.onInput TypeOldGenFactor
-                                        ]
-                                        []
-                                    ]
-                                ]
-                            , div [ class "form-group" ]
-                                [ span
+                                , span
                                     [ class "inline-label" ]
-                                    [ text "Collect oldest generation by" ]
-                                , fieldset []
-                                    ((radio "Copying" (model_.runSpec.compaction == False) (ToggleCompaction False))
-                                        ++ (radio "Compacting" (model_.runSpec.compaction == True) (ToggleCompaction True))
-                                    )
+                                    [ text "split into" ]
+                                , textInput
+                                    model_.runSpec.nurseryChunks
+                                    TypeNurseryChunks
+                                    [ class "tiny" ]
+                                , span [ class "inline-label" ]
+                                    [ text "chunks" ]
                                 ]
                             , div [ class "form-group" ]
                                 [ label
-                                    [ class "inline-label" ]
-                                    [ input
-                                        [ type_ "checkbox"
-                                        , Html.Events.onCheck ToggleStats
-                                        , Html.Attributes.checked model_.runSpec.stats
-                                        ]
-                                        []
-                                    , text "stats"
-                                    ]
-                                , label
-                                    [ class "inline-label" ]
-                                    [ input
-                                        [ type_ "checkbox"
-                                        , Html.Events.onCheck ToggleProf
-                                        , Html.Attributes.checked model_.runSpec.prof
-                                        ]
-                                        []
-                                    , text "profile"
-                                    ]
-                                , label
-                                    [ class "inline-label" ]
-                                    [ input
-                                        [ type_ "checkbox"
-                                        , Html.Events.onCheck ToggleEventlog
-                                        , Html.Attributes.checked model_.runSpec.eventlog
-                                        ]
-                                        []
-                                    , text "eventlog"
-                                    ]
-                                ]
-                            , div [ class "form-group" ]
-                                [ input
-                                    [ class "btn"
-                                    , type_ "submit"
-                                    , Html.Attributes.value "Run"
-                                    ]
                                     []
+                                    [ text "Large object size" ]
+                                , textInput
+                                    model_.runSpec.largeObjectSize
+                                    TypeLargeObjectSize
+                                    [ Html.Attributes.placeholder <|
+                                        if String.isEmpty model_.runSpec.nurserySize then
+                                            "1m"
+                                        else
+                                            model_.runSpec.nurserySize
+                                    ]
                                 ]
                             ]
-                        , viewFlagsRequired model_
+                        , div [ class "form-pair" ]
+                            [ div [ class "form-group" ]
+                                [ label
+                                    []
+                                    [ text "Minimum old generation size" ]
+                                , textInput
+                                    model_.runSpec.oldGenMinSize
+                                    TypeOldGenMinSize
+                                    [ Html.Attributes.placeholder "1m" ]
+                                ]
+                            , div [ class "form-group" ]
+                                [ label
+                                    []
+                                    [ text "Old generation factor" ]
+                                , textInput
+                                    model_.runSpec.oldGenFactor
+                                    TypeOldGenFactor
+                                    [ Html.Attributes.placeholder "2" ]
+                                ]
+                            ]
+                        , div [ class "form-group" ]
+                            [ span
+                                [ class "inline-label" ]
+                                [ text "Collect oldest generation by" ]
+                            , fieldset []
+                                ((radio "Copying" (model_.runSpec.compaction == False) (ToggleCompaction False))
+                                    ++ (radio "Compacting" (model_.runSpec.compaction == True) (ToggleCompaction True))
+                                )
+                            ]
+                        , div [ class "form-group" ]
+                            [ label
+                                [ class "inline-label" ]
+                                (checkbox "stats" model_.runSpec.stats ToggleStats [])
+                            , label
+                                [ class "inline-label" ]
+                                (checkbox "profile" model_.runSpec.prof ToggleProf [])
+                            , label
+                                [ class "inline-label" ]
+                                (checkbox "eventlog" model_.runSpec.eventlog ToggleEventlog [])
+                            ]
+                        , div [ class "form-group" ]
+                            [ input
+                                [ class "btn"
+                                , type_ "submit"
+                                , Html.Attributes.value "Run"
+                                ]
+                                []
+                            ]
                         ]
+                    , viewFlagsRequired model_.runSpec
+                    ]
 
-                    RunningProgram programData programOutput ->
-                        [ viewProgramOutput programData programOutput ]
+                RunningProgram programData programOutput ->
+                    [ viewOutput programOutput ]
 
-                    MsgParseError parseError ->
-                        [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
+                MsgParseError parseError ->
+                    [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                    ExploringRun programData programRun ->
-                        [ button [ class "btn btn-back", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
-                        , viewProgramOutput programData programRun
-                        ]
-                            ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
-                            ++ List.filterMap (Maybe.map (.garbageCollections >> viewStats)) [ programRun.stats ]
-                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderBytesAllocatedSVG)) [ programRun.stats ]
-                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderBytesCopiedSVG)) [ programRun.stats ]
-                            ++ List.filterMap (Maybe.map (.garbageCollections >> timeBucketGCs >> renderLiveBytesSVG)) [ programRun.stats ]
+                ExploringRun programData programRun ->
+                    [ button [ class "btn btn-back", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                    , viewOutput programRun
+                    ]
+                        ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
+                        ++ Maybe.unwrap [] (List.singleton << viewStats) programRun.stats
+
+
+textInput : String -> (String -> a) -> List (Attribute a) -> Html a
+textInput value message attributes =
+    input
+        (type_ "text"
+            :: Html.Attributes.value value
+            :: Html.Events.onInput message
+            :: attributes
+        )
+        []
+
+
+checkbox : String -> Bool -> (Bool -> a) -> List (Attribute a) -> List (Html a)
+checkbox value checked message attributes =
+    [ input
+        (type_ "checkbox"
+            :: Html.Attributes.checked checked
+            :: Html.Events.onCheck message
+            :: attributes
+        )
+        []
+    , text value
+    ]
 
 
 radio : String -> Bool -> a -> List (Html a)
@@ -518,16 +492,13 @@ viewPreview data =
         ]
 
 
-viewFlagsRequired : ProgramData -> Html a
-viewFlagsRequired data =
-    let
-        flags : List String
-        flags =
-            Daffy.RunSpec.ghcFlags data.runSpec
-    in
-        if List.isEmpty flags then
+viewFlagsRequired : RunSpec -> Html a
+viewFlagsRequired spec =
+    case Daffy.RunSpec.ghcFlags spec of
+        [] ->
             text ""
-        else
+
+        flags ->
             div [ class "flags-required" ]
                 [ span [ class "flags-required__preface" ]
                     [ text "Note: your program must be compiled with: " ]
@@ -536,76 +507,36 @@ viewFlagsRequired data =
                 ]
 
 
-
--- Bucket garbage collections by timestamp (since the -S output is only accurate
--- to the millisecond or so). Don't put garbage collections from the same
--- generation in the same bucket.
-
-
-timeBucketGCs : List GCStats -> List { totalTimeElapsed : Float, averageBytesAllocated : Float, averageBytesCopied : Float, averageLiveBytes : Float, generation : Int }
-timeBucketGCs =
-    groupBy (\prev curr -> curr.totalTime.elapsed == prev.totalTime.elapsed)
-        >> List.concatMap
-            (\gcsAtTime ->
-                gcsAtTime
-                    |> Nonempty.toList
-                    |> List.sortBy .generation
-                    |> groupBy (\a b -> a.generation == b.generation)
-                    |> List.map
-                        (\(Nonempty { generation, bytesAllocated, bytesCopied, totalTime, liveBytes } gcs) ->
-                            let
-                                len =
-                                    toFloat (List.length gcs)
-                            in
-                                { totalTimeElapsed = totalTime.elapsed
-                                , averageBytesAllocated =
-                                    toFloat (bytesAllocated + List.sum (List.map .bytesAllocated gcs))
-                                        / (1 + len)
-                                , averageBytesCopied =
-                                    toFloat (bytesCopied + List.sum (List.map .bytesCopied gcs))
-                                        / (1 + len)
-                                , averageLiveBytes =
-                                    toFloat (liveBytes + List.sum (List.map .liveBytes gcs))
-                                        / (1 + len)
-                                , generation = generation
-                                }
-                        )
-            )
+viewOutput : { r | output : Array Output } -> Html a
+viewOutput { output } =
+    div [ class "ps1" ]
+        (output
+            |> Array.toList
+            |> List.map (p [] << List.singleton << text << .line)
+        )
 
 
-viewStats : List GCStats -> Html msg
-viewStats garbageCollections =
+viewStats : Stats -> Html msg
+viewStats stats =
     let
-        timeBucketedGCs : List { totalTimeElapsed : Float, averageBytesAllocated : Float, averageBytesCopied : Float, averageLiveBytes : Float, generation : Int }
-        timeBucketedGCs =
-            timeBucketGCs garbageCollections
+        elapsedTimeGCs : List ElapsedTimeGCStats
+        elapsedTimeGCs =
+            Daffy.ElapsedTimeGCStats.make stats.garbageCollections
     in
         div []
-            [ LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
-                [ LineChart.line (Color.rgb 255 99 71)
-                    Dots.none
-                    "Last Run"
-                    timeBucketedGCs
-                ]
-            , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
+            [ viewBytesAllocatedSvg elapsedTimeGCs
+            , viewBytesCopiedSvg elapsedTimeGCs
+            , viewLiveBytesSvg elapsedTimeGCs
+            , viewNumGCsSvg elapsedTimeGCs
+
+            --   LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
+            --     [ LineChart.line (Color.rgb 255 99 71)
+            --         Dots.none
+            --         "Last Run"
+            --         elapsedTimeGCs
+            --     ]
+            -- , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
             ]
-
-
-groupBy : (a -> a -> Bool) -> List a -> List (Nonempty a)
-groupBy sameGroup =
-    List.foldr
-        (\x ys ->
-            case ys of
-                (Nonempty y ys_) :: groups ->
-                    if sameGroup x y then
-                        Nonempty x (y :: ys_) :: groups
-                    else
-                        Nonempty x [] :: ys
-
-                [] ->
-                    [ Nonempty x [] ]
-        )
-        []
 
 
 chartConfig : (data -> Float) -> (data -> Float) -> LineChart.Config data msg
@@ -634,8 +565,8 @@ margin =
     ( 800 - margin.left - margin.right, 500 - margin.top - margin.bottom )
 
 
-renderBytesAllocatedSVG : List { r | averageBytesAllocated : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
-renderBytesAllocatedSVG stats =
+viewBytesAllocatedSvg : List ElapsedTimeGCStats -> Svg msg
+viewBytesAllocatedSvg stats =
     let
         xscale : ContinuousScale
         xscale =
@@ -644,7 +575,7 @@ renderBytesAllocatedSVG stats =
                 xmax =
                     stats
                         |> List.last
-                        |> Maybe.unwrap 0 .totalTimeElapsed
+                        |> Maybe.unwrap 0 .time
             in
                 VScale.linear ( 0, xmax ) ( 0, width )
 
@@ -654,14 +585,14 @@ renderBytesAllocatedSVG stats =
                 ymin : Float
                 ymin =
                     stats
-                        |> List.map .averageBytesAllocated
+                        |> List.map (\x -> toFloat (x.bytesAllocated // x.count))
                         |> List.minimum
                         |> Maybe.withDefault 0
 
                 ymax : Float
                 ymax =
                     stats
-                        |> List.map .averageBytesAllocated
+                        |> List.map (\x -> toFloat (x.bytesAllocated // x.count))
                         |> List.maximum
                         |> Maybe.withDefault 0
             in
@@ -693,20 +624,23 @@ renderBytesAllocatedSVG stats =
                 }
                 yscale
 
-        point stats =
+        point gc =
             Svg.g
                 []
                 [ Svg.circle
                     [ Svg.Attributes.cx <|
                         toString <|
-                            VScale.convert xscale (stats.totalTimeElapsed)
+                            VScale.convert xscale gc.time
                     , Svg.Attributes.cy <|
                         toString <|
-                            VScale.convert yscale (stats.averageBytesAllocated)
+                            VScale.convert yscale <|
+                                toFloat <|
+                                    gc.bytesAllocated
+                                        // gc.count
                     , Svg.Attributes.r <|
                         toString <|
                             2
-                                * (stats.generation + 1)
+                                * (gc.generation + 1)
                     ]
                     []
                 ]
@@ -724,8 +658,8 @@ renderBytesAllocatedSVG stats =
             ]
 
 
-renderBytesCopiedSVG : List { r | averageBytesCopied : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
-renderBytesCopiedSVG stats =
+viewBytesCopiedSvg : List ElapsedTimeGCStats -> Svg msg
+viewBytesCopiedSvg stats =
     let
         xscale : ContinuousScale
         xscale =
@@ -734,7 +668,7 @@ renderBytesCopiedSVG stats =
                 xmax =
                     stats
                         |> List.last
-                        |> Maybe.unwrap 0 .totalTimeElapsed
+                        |> Maybe.unwrap 0 .time
             in
                 VScale.linear ( 0, xmax ) ( 0, width )
 
@@ -744,14 +678,14 @@ renderBytesCopiedSVG stats =
                 ymin : Float
                 ymin =
                     stats
-                        |> List.map .averageBytesCopied
+                        |> List.map (\x -> toFloat (x.bytesCopied // x.count))
                         |> List.minimum
                         |> Maybe.withDefault 0
 
                 ymax : Float
                 ymax =
                     stats
-                        |> List.map .averageBytesCopied
+                        |> List.map (\x -> toFloat (x.bytesCopied // x.count))
                         |> List.maximum
                         |> Maybe.withDefault 0
             in
@@ -783,20 +717,23 @@ renderBytesCopiedSVG stats =
                 }
                 yscale
 
-        point stats =
+        point gc =
             Svg.g
                 []
                 [ Svg.circle
                     [ Svg.Attributes.cx <|
                         toString <|
-                            VScale.convert xscale (stats.totalTimeElapsed)
+                            VScale.convert xscale gc.time
                     , Svg.Attributes.cy <|
                         toString <|
-                            VScale.convert yscale (stats.averageBytesCopied)
+                            VScale.convert yscale <|
+                                toFloat <|
+                                    gc.bytesCopied
+                                        // gc.count
                     , Svg.Attributes.r <|
                         toString <|
                             2
-                                * (stats.generation + 1)
+                                * (gc.generation + 1)
                     ]
                     []
                 ]
@@ -814,8 +751,8 @@ renderBytesCopiedSVG stats =
             ]
 
 
-renderLiveBytesSVG : List { r | averageLiveBytes : Float, totalTimeElapsed : Float, generation : Int } -> Svg msg
-renderLiveBytesSVG stats =
+viewLiveBytesSvg : List ElapsedTimeGCStats -> Svg msg
+viewLiveBytesSvg stats =
     let
         xscale : ContinuousScale
         xscale =
@@ -824,7 +761,7 @@ renderLiveBytesSVG stats =
                 xmax =
                     stats
                         |> List.last
-                        |> Maybe.unwrap 0 .totalTimeElapsed
+                        |> Maybe.unwrap 0 .time
             in
                 VScale.linear ( 0, xmax ) ( 0, width )
 
@@ -834,14 +771,14 @@ renderLiveBytesSVG stats =
                 ymin : Float
                 ymin =
                     stats
-                        |> List.map .averageLiveBytes
+                        |> List.map (\x -> toFloat (x.liveBytes // x.count))
                         |> List.minimum
                         |> Maybe.withDefault 0
 
                 ymax : Float
                 ymax =
                     stats
-                        |> List.map .averageLiveBytes
+                        |> List.map (\x -> toFloat (x.liveBytes // x.count))
                         |> List.maximum
                         |> Maybe.withDefault 0
             in
@@ -873,20 +810,106 @@ renderLiveBytesSVG stats =
                 }
                 yscale
 
-        point stats =
+        point gc =
             Svg.g
                 []
                 [ Svg.circle
                     [ Svg.Attributes.cx <|
                         toString <|
-                            VScale.convert xscale (stats.totalTimeElapsed)
+                            VScale.convert xscale gc.time
                     , Svg.Attributes.cy <|
                         toString <|
-                            VScale.convert yscale (stats.averageLiveBytes)
+                            VScale.convert yscale <|
+                                toFloat <|
+                                    gc.liveBytes
+                                        // gc.count
                     , Svg.Attributes.r <|
                         toString <|
                             2
-                                * (stats.generation + 1)
+                                * (gc.generation + 1)
+                    ]
+                    []
+                ]
+    in
+        Svg.svg
+            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
+            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
+            ]
+            [ Svg.g
+                [ transformTranslate ( margin.left, margin.top ) ]
+                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
+                , Svg.g [] [ yaxis ]
+                , Svg.g [] (List.map point stats)
+                ]
+            ]
+
+viewNumGCsSvg : List ElapsedTimeGCStats -> Svg msg
+viewNumGCsSvg stats =
+    let
+        xscale : ContinuousScale
+        xscale =
+            let
+                xmax : Float
+                xmax =
+                    stats
+                        |> List.last
+                        |> Maybe.unwrap 0 .time
+            in
+                VScale.linear ( 0, xmax ) ( 0, width )
+
+        yscale : ContinuousScale
+        yscale =
+            let
+                ymax : Float
+                ymax =
+                    stats
+                        |> List.map .count
+                        |> List.maximum
+                        |> Maybe.unwrap 0 toFloat
+            in
+                VScale.linear ( 0, ymax ) ( height, 0 )
+
+        xaxis : Svg msg
+        xaxis =
+            VAxis.axis
+                { orientation = VAxis.Bottom
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                xscale
+
+        yaxis : Svg msg
+        yaxis =
+            VAxis.axis
+                { orientation = VAxis.Left
+                , ticks = Nothing
+                , tickFormat = Nothing
+                , tickCount = 10
+                , tickSizeInner = 6
+                , tickSizeOuter = 6
+                , tickPadding = 3
+                }
+                yscale
+
+        point gc =
+            Svg.g
+                []
+                [ Svg.circle
+                    [ Svg.Attributes.cx <|
+                        toString <|
+                            VScale.convert xscale gc.time
+                    , Svg.Attributes.cy <|
+                        toString <|
+                            VScale.convert yscale <|
+                                toFloat <| gc.count
+                    , Svg.Attributes.r <|
+                        toString <|
+                            2
+                                * (gc.generation + 1)
                     ]
                     []
                 ]
