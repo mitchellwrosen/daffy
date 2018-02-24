@@ -2,11 +2,9 @@ module Main exposing (..)
 
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
 import Daffy.Lenses exposing (..)
-import Daffy.List.Extra exposing (groupBy)
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
 import Array exposing (Array)
-import Color
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events
@@ -25,13 +23,11 @@ import LineChart.Junk as Junk
 import LineChart.Legends as Legends
 import LineChart.Line as Line
 import List.Extra as List
-import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 import Maybe.Extra as Maybe
 import Step exposing (Step)
 import Svg exposing (Svg)
 import Svg.Attributes
 import Visualization.Axis as VAxis
-import Visualization.Path as VPath
 import Visualization.Scale as VScale exposing (ContinuousScale)
 import WebSocket
 
@@ -46,17 +42,17 @@ main =
         }
 
 
+
+-- TODO pull the "Initial state out of Model "
+-- type alias SuperModel =
+--     { nextSpec : RunSpec, pastRuns : List Model }
+
+
 type Model
-    = Initial ProgramData
-    | RunningProgram ProgramData ProgramOutput
+    = Initial RunSpec
+    | RunningProgram RunSpec ProgramOutput
     | MsgParseError String
-    | ExploringRun ProgramData ProgramRun
-
-
-type alias ProgramData =
-    { runSpec : RunSpec
-    , runs : Array ProgramRun
-    }
+    | ExploringRun RunSpec ProgramRun
 
 
 type alias ProgramOutput =
@@ -91,14 +87,12 @@ type Msg
     | TypeLargeObjectSize String
     | TypeOldGenMinSize String
     | TypeOldGenFactor String
-    | ToggleCompaction Bool
-    | ToggleStats Bool
-    | ToggleProf Bool
-    | ToggleEventlog Bool
+    | ToggleCompaction
+    | ToggleStats
+    | ToggleProf
+    | ToggleEventlog
     | RunCommand
     | RunningProgramMsg RunningProgramMsg
-    | ExploreRun Index
-    | StartNewRun
 
 
 type alias Index =
@@ -122,100 +116,89 @@ type RunningProgramMsg
 init : Model
 init =
     Initial
-        { runSpec =
-            { command = ""
-            , nurserySize = ""
-            , nurseryChunks = ""
-            , largeObjectSize = ""
-            , oldGenMinSize = ""
-            , oldGenFactor = ""
-            , compaction = False
-            , stats = True
-            , prof = False
-            , eventlog = False
-            }
-        , runs = Array.empty
+        { command = ""
+        , nurserySize = ""
+        , nurseryChunks = ""
+        , largeObjectSize = ""
+        , oldGenMinSize = ""
+        , oldGenFactor = ""
+        , compaction = False
+        , stats = True
+        , prof = False
+        , eventlog = False
         }
 
 
 update : Msg -> Model -> Step Model Msg Never
 update msg model =
     case ( model, msg ) of
-        ( Initial model_, TypeCommand s ) ->
-            model_
-                |> set (runSpecL << commandL) s
+        ( Initial runSpec, TypeCommand s ) ->
+            runSpec
+                |> set commandL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, TypeNurserySize s ) ->
-            model_
-                |> set (runSpecL << nurserySizeL) s
+        ( Initial runSpec, TypeNurserySize s ) ->
+            runSpec
+                |> set nurserySizeL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, TypeNurseryChunks s ) ->
-            model_
-                |> set (runSpecL << nurseryChunksL) s
+        ( Initial runSpec, TypeNurseryChunks s ) ->
+            runSpec
+                |> set nurseryChunksL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, TypeLargeObjectSize s ) ->
-            model_
-                |> set (runSpecL << largeObjectSizeL) s
+        ( Initial runSpec, TypeLargeObjectSize s ) ->
+            runSpec
+                |> set largeObjectSizeL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, TypeOldGenMinSize s ) ->
-            model_
-                |> set (runSpecL << oldGenMinSizeL) s
+        ( Initial runSpec, TypeOldGenMinSize s ) ->
+            runSpec
+                |> set oldGenMinSizeL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, TypeOldGenFactor s ) ->
-            model_
-                |> set (runSpecL << oldGenFactorL) s
+        ( Initial runSpec, TypeOldGenFactor s ) ->
+            runSpec
+                |> set oldGenFactorL s
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, ToggleCompaction b ) ->
-            model_
-                |> set (runSpecL << compactionL) b
+        ( Initial runSpec, ToggleCompaction ) ->
+            runSpec
+                |> set compactionL (not runSpec.compaction)
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, ToggleStats b ) ->
-            model_
-                |> set (runSpecL << statsL) b
+        ( Initial runSpec, ToggleStats ) ->
+            runSpec
+                |> set statsL (not runSpec.stats)
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, ToggleProf b ) ->
-            model_
-                |> set (runSpecL << profL) b
+        ( Initial runSpec, ToggleProf ) ->
+            runSpec
+                |> set profL (not runSpec.prof)
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, ToggleEventlog b ) ->
-            model_
-                |> set (runSpecL << eventlogL) b
+        ( Initial runSpec, ToggleEventlog ) ->
+            runSpec
+                |> set eventlogL (not runSpec.eventlog)
                 |> Initial
                 |> Step.to
 
-        ( Initial model_, ExploreRun index ) ->
-            case Array.get index model_.runs of
-                Just programRun ->
-                    Step.to (ExploringRun model_ programRun)
-
-                Nothing ->
-                    Step.noop
-
-        ( Initial model_, RunCommand ) ->
-            Step.to (RunningProgram model_ { output = Array.empty, stats = Nothing, flamegraphs = [] })
+        ( Initial runSpec, RunCommand ) ->
+            Step.to (RunningProgram runSpec { output = Array.empty, stats = Nothing, flamegraphs = [] })
                 |> Step.withCmd
-                    ([ ( "command", Json.Encode.string model_.runSpec.command )
-                     , ( "stats", Json.Encode.bool model_.runSpec.stats )
-                     , ( "prof", Json.Encode.bool model_.runSpec.prof )
-                     , ( "eventlog", Json.Encode.bool model_.runSpec.eventlog )
+                    ([ ( "command", Json.Encode.string runSpec.command )
+                     , ( "stats", Json.Encode.bool runSpec.stats )
+                     , ( "prof", Json.Encode.bool runSpec.prof )
+                     , ( "eventlog", Json.Encode.bool runSpec.eventlog )
                      ]
                         |> Json.Encode.object
                         |> Json.Encode.encode 0
@@ -236,9 +219,6 @@ update msg model =
                                 Ok run ->
                                     ExploringRun model run
                     )
-
-        ( ExploringRun data programRun, StartNewRun ) ->
-            Step.to (Initial { data | runs = Array.push programRun data.runs })
 
         _ ->
             Step.noop
@@ -330,22 +310,22 @@ view model =
     div [ class "container" ] <|
         [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
             ++ case model of
-                Initial model_ ->
+                Initial runSpec ->
                     [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
                         [ div [ class "form-group prompt-group" ]
                             [ span [ class "ps1" ] [ text "$" ]
-                            , textInput model_.runSpec.command
+                            , textInput runSpec.command
                                 TypeCommand
                                 [ Html.Attributes.autofocus True ]
                             ]
-                        , viewPreview model_
+                        , viewPreview runSpec
                         , div [ class "form-pair" ]
                             [ div [ class "form-group" ]
                                 [ label
                                     []
                                     [ text "Nursery size" ]
                                 , textInput
-                                    model_.runSpec.nurserySize
+                                    runSpec.nurserySize
                                     TypeNurserySize
                                     [ class "tiny"
                                     , Html.Attributes.placeholder "1m"
@@ -354,7 +334,7 @@ view model =
                                     [ class "inline-label" ]
                                     [ text "split into" ]
                                 , textInput
-                                    model_.runSpec.nurseryChunks
+                                    runSpec.nurseryChunks
                                     TypeNurseryChunks
                                     [ class "tiny" ]
                                 , span [ class "inline-label" ]
@@ -365,13 +345,13 @@ view model =
                                     []
                                     [ text "Large object size" ]
                                 , textInput
-                                    model_.runSpec.largeObjectSize
+                                    runSpec.largeObjectSize
                                     TypeLargeObjectSize
                                     [ Html.Attributes.placeholder <|
-                                        if String.isEmpty model_.runSpec.nurserySize then
+                                        if String.isEmpty runSpec.nurserySize then
                                             "1m"
                                         else
-                                            model_.runSpec.nurserySize
+                                            runSpec.nurserySize
                                     ]
                                 ]
                             ]
@@ -381,7 +361,7 @@ view model =
                                     []
                                     [ text "Minimum old generation size" ]
                                 , textInput
-                                    model_.runSpec.oldGenMinSize
+                                    runSpec.oldGenMinSize
                                     TypeOldGenMinSize
                                     [ Html.Attributes.placeholder "1m" ]
                                 ]
@@ -390,7 +370,7 @@ view model =
                                     []
                                     [ text "Old generation factor" ]
                                 , textInput
-                                    model_.runSpec.oldGenFactor
+                                    runSpec.oldGenFactor
                                     TypeOldGenFactor
                                     [ Html.Attributes.placeholder "2" ]
                                 ]
@@ -399,21 +379,33 @@ view model =
                             [ span
                                 [ class "inline-label" ]
                                 [ text "Collect oldest generation by" ]
-                            , fieldset []
-                                ((radio "Copying" (model_.runSpec.compaction == False) (ToggleCompaction False))
-                                    ++ (radio "Compacting" (model_.runSpec.compaction == True) (ToggleCompaction True))
-                                )
+                            , fieldset [] <|
+                                let
+                                    when b x =
+                                        if b then
+                                            Just x
+                                        else
+                                            Nothing
+                                in
+                                    List.concat
+                                        [ radio "Copying"
+                                            (runSpec.compaction == False)
+                                            (when (runSpec.compaction == True) ToggleCompaction)
+                                        , radio "Compacting"
+                                            (runSpec.compaction == True)
+                                            (when (runSpec.compaction == False) ToggleCompaction)
+                                        ]
                             ]
                         , div [ class "form-group" ]
                             [ label
                                 [ class "inline-label" ]
-                                (checkbox "stats" model_.runSpec.stats ToggleStats [])
+                                (checkbox "stats" runSpec.stats (\_ -> ToggleStats) [])
                             , label
                                 [ class "inline-label" ]
-                                (checkbox "profile" model_.runSpec.prof ToggleProf [])
+                                (checkbox "profile" runSpec.prof (\_ -> ToggleProf) [])
                             , label
                                 [ class "inline-label" ]
-                                (checkbox "eventlog" model_.runSpec.eventlog ToggleEventlog [])
+                                (checkbox "eventlog" runSpec.eventlog (\_ -> ToggleEventlog) [])
                             ]
                         , div [ class "form-group" ]
                             [ input
@@ -424,7 +416,7 @@ view model =
                                 []
                             ]
                         ]
-                    , viewFlagsRequired model_.runSpec
+                    , viewFlagsRequired runSpec
                     ]
 
                 RunningProgram programData programOutput ->
@@ -434,7 +426,7 @@ view model =
                     [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
                 ExploringRun programData programRun ->
-                    [ button [ class "btn btn-back", type_ "button", Html.Events.onClick StartNewRun ] [ text "Back" ]
+                    [ button [ class "btn btn-back", type_ "button" ] [ text "Back" ]
                     , viewOutput programRun
                     ]
                         ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
@@ -465,7 +457,7 @@ checkbox value checked message attributes =
     ]
 
 
-radio : String -> Bool -> a -> List (Html a)
+radio : String -> Bool -> Maybe a -> List (Html a)
 radio value isChecked msg =
     let
         id =
@@ -474,7 +466,8 @@ radio value isChecked msg =
         [ input
             [ type_ "radio"
             , checked isChecked
-            , Html.Events.onClick msg
+            , Maybe.map Html.Events.onClick msg
+                |> Maybe.withDefault (Html.Events.on "nothing" (Json.Decode.fail "fake event"))
             , Html.Attributes.id id
             ]
             []
@@ -484,11 +477,11 @@ radio value isChecked msg =
         ]
 
 
-viewPreview : ProgramData -> Html a
-viewPreview data =
+viewPreview : RunSpec -> Html a
+viewPreview runSpec =
     div [ class "command-preview" ]
         [ span [ class "ps1" ] [ text "$" ]
-        , text <| Daffy.RunSpec.preview data.runSpec
+        , text <| Daffy.RunSpec.preview runSpec
         ]
 
 
@@ -843,6 +836,7 @@ viewLiveBytesSvg stats =
                 ]
             ]
 
+
 viewNumGCsSvg : List ElapsedTimeGCStats -> Svg msg
 viewNumGCsSvg stats =
     let
@@ -905,7 +899,8 @@ viewNumGCsSvg stats =
                     , Svg.Attributes.cy <|
                         toString <|
                             VScale.convert yscale <|
-                                toFloat <| gc.count
+                                toFloat <|
+                                    gc.count
                     , Svg.Attributes.r <|
                         toString <|
                             2
