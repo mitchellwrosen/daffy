@@ -24,6 +24,7 @@ import Data.Either as X
 import Data.Foldable as X (toList)
 import Data.Function as X ((&), fix)
 import Data.IntMap.Strict as X (IntMap)
+import Data.IntSet as X (IntSet)
 import Data.IORef as X
 import Data.Kind as X (Type)
 import Data.Semigroup as X ((<>))
@@ -31,6 +32,7 @@ import Data.Text as X (Text, pack, unpack)
 import Data.Text.Encoding as X (decodeUtf8, encodeUtf8)
 import Data.Typeable as X (Typeable)
 import Data.Vector as X (Vector)
+import Data.Word as X
 import Debug.Trace as X
 import GHC.Generics as X (Generic)
 import GHC.TypeLits as X (KnownSymbol, Symbol, symbolVal')

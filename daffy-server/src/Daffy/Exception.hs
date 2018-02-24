@@ -8,7 +8,7 @@ import qualified Data.ByteString.Lazy as LByteString
 
 data DaffyException
   = RequestParseException LByteString [Char]
-  | EventlogParseException [Char] FilePath
+  | EventlogParseException [Char]
   | InfoParseException LByteString
   | ProfileParseException [Char] FilePath
   | StatsParseException [Char] FilePath
@@ -23,8 +23,8 @@ instance Exception DaffyException where
         , unpack (decodeUtf8 (LByteString.toStrict bytes))
         ]
 
-    EventlogParseException err path ->
-      "Failed to parse event log (" ++ path ++ "): " ++ err
+    EventlogParseException err ->
+      "Failed to parse event log: " ++ err
 
     InfoParseException bytes ->
       intercalate "\n"

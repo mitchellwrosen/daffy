@@ -1,6 +1,14 @@
+{-# options_ghc -fno-warn-partial-type-signatures #-}
+
 module Daffy.Eventlog
   ( parse
   , stream
+    -- ** Eventlog analysis
+  , World(..)
+  , Cap(..)
+  , Capset(..)
+  , initialWorld
+  , stepWorld
   ) where
 
 import Daffy.Exception
@@ -12,7 +20,9 @@ import System.IO (IOMode(ReadMode), withBinaryFile)
 
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Streaming as SByteString
-import qualified GHC.RTS.Events as GHC (Event)
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.IntSet as IntSet
+import qualified GHC.RTS.Events as GHC
 import qualified GHC.RTS.Events.Incremental as GHC
 import qualified System.INotify as INotify
 
@@ -22,16 +32,26 @@ import qualified System.INotify as INotify
 -- hasn't closed the file, then more events are to come, at which point we will
 -- no longer be at EOF.
 --
+-- 'threadWaitRead' (i.e. 'select' or 'epoll' syscall) is not an option here,
+-- because the eventlog is just a regular file, not a FIFO or a socket.
+--
 -- So, we use inotify to register interest in "modify" and "close" events on the
 -- file, and thus, the simplest, single-celled "pub-sub" abstraction in the
 -- world was born: an MVar inside a TMVar.
 --
+-- We have one "publisher": the inofity callback thread that occasionally sees
+-- and forwards "modify" or "close" events.
+--
+-- We have one "subscriber": the thread that is incrementally parsing the
+-- eventlog, which, upon reaching EOF, becomes interested in the inotify events
+-- being published.
+--
 -- An *empty* TMVar indicates that there is *no subscriber*, so any "modify"
--- events that the "publisher" (inotify callback thread) might publish should
--- just be thrown away (without an MVar, there isn't anywhere to publish *to*).
--- The lack of interested subscriber at this moment is totally normal: during
--- incremental parsing of the eventlog, yet more events were appended to the
--- file.
+-- events that the publisher might publish should just be thrown away (without
+-- an MVar, there isn't anywhere to publish *to*). The lack of interested
+-- subscriber at this moment is totally normal: during incremental parsing of
+-- the eventlog, yet more events were appended to the end of the file before we
+-- got there.
 --
 -- A *full* TMVar indicates that there *is* a subscriber: at some point in the
 -- past, EOF was reached by the incremental parser, and it would like to be
@@ -81,7 +101,7 @@ stream path = do
     lift (managed (withBinaryFile path ReadMode))
 
   hoist io
-    (eventStream path GHC.decodeEventLog
+    (eventStream GHC.decodeEventLog
       (streamHandle (subscribe var) handle))
 
 streamHandle :: IO EventlogEvent -> Handle -> SByteString IO ()
@@ -138,9 +158,9 @@ subscribe var = do
 -- Batch eventlog parsing
 
 -- | @parse logfile@ parses an eventlog file, assumed to be fully written.
-parse :: FilePath -> Handle -> Stream (Of GHC.Event) IO ()
-parse path =
-  eventStream path GHC.decodeEventLog . SByteString.fromHandle
+parse :: Handle -> Stream (Of GHC.Event) IO ()
+parse =
+  eventStream GHC.decodeEventLog . SByteString.fromHandle
 
 --------------------------------------------------------------------------------
 -- Common functionality
@@ -149,22 +169,131 @@ parse path =
 -- of events) and a "Streaming ByteString" (streaming producer of bytes), and
 -- out comes a "Stream Of Event" (streaming producer of events).
 eventStream
-  :: FilePath
-  -> GHC.Decoder GHC.Event
+  :: GHC.Decoder GHC.Event
   -> SByteString IO ()
   -> Stream (Of GHC.Event) IO ()
-eventStream path decoder bytes =
+eventStream decoder bytes =
   case decoder of
     GHC.Consume k ->
       io (SByteString.unconsChunk bytes) >>= \case
         Nothing ->
           pure ()
         Just (chunk, bytes') ->
-          eventStream path (k chunk) bytes'
+          eventStream (k chunk) bytes'
     GHC.Produce event decoder' -> do
       yields (event :> ())
-      eventStream path decoder' bytes
+      eventStream decoder' bytes
     GHC.Done _ ->
       error "Done"
     GHC.Error _ err ->
-      lift (throw (EventlogParseException err path))
+      lift (throw (EventlogParseException err))
+
+--------------------------------------------------------------------------------
+-- Eventlog analysis
+
+data World = World
+  { worldTimestamp :: !Word64
+  , worldCaps :: !(IntMap Cap)
+  , worldCapsets :: !(IntMap Capset)
+  }
+
+-- | Capability.
+data Cap = Cap
+  { capId :: !Int
+    -- ^ Capability id.
+  , capCapsets :: !IntSet
+    -- ^ The capability set ids this capability belongs to.
+  }
+
+-- | A set of capabilities.
+data Capset = Capset
+  { capsetId :: !Word32
+    -- ^ Capability set id.
+  , capsetType :: !GHC.CapsetType
+    -- ^ The type of capability set.
+  , capsetCaps :: !IntSet
+    -- ^ The set of capability ids that make up this capability set.
+  }
+
+initialWorld :: World
+initialWorld =
+  World
+    { worldTimestamp = 0
+    , worldCaps = mempty
+    , worldCapsets = mempty
+    }
+
+-- | Step the 'World' forward with an event from the eventlog.
+stepWorld :: GHC.Event -> World -> World
+stepWorld event (setTimestamp (GHC.evTime event) -> world) =
+  case GHC.evSpec event of
+    -- Insert into the capset's caps and the cap's capsets.
+    GHC.CapsetAssignCap id cap_id ->
+      world
+        { worldCaps =
+            IntMap.adjust
+              (\cap ->
+                cap
+                  { capCapsets =
+                      IntSet.insert (fromIntegral id) (capCapsets cap)
+                  })
+              cap_id
+              (worldCaps world)
+        , worldCapsets =
+            IntMap.adjust
+              (\capset ->
+                capset
+                  { capsetCaps =
+                      IntSet.insert cap_id (capsetCaps capset)
+                  })
+              (fromIntegral id)
+              (worldCapsets world)
+        }
+
+    -- Create a new empty capset in 'worldCapsets'
+    GHC.CapsetCreate id type_ ->
+      world
+        { worldCapsets =
+            IntMap.insert
+              (fromIntegral id)
+              (Capset
+                { capsetId = id
+                , capsetType = type_
+                , capsetCaps = mempty
+                })
+              (worldCapsets world)
+        }
+
+    -- Delete the capset from 'worldCapsets', and for each cap that was in it,
+    -- delete the capset from its 'capCapsets'.
+    GHC.CapsetDelete id ->
+      let
+        capsets :: IntMap Capset
+        capsets =
+          worldCapsets world
+
+        new_caps :: IntMap Cap
+        new_caps =
+          IntSet.foldl'
+            (\caps cap_id ->
+              IntMap.adjust
+                (\cap ->
+                  cap
+                    { capCapsets =
+                        IntSet.delete (fromIntegral id) (capCapsets cap)
+                    })
+                cap_id
+                caps)
+            (worldCaps world)
+            (capsetCaps (capsets IntMap.! fromIntegral id))
+      in
+        world
+          { worldCaps = new_caps
+          , worldCapsets = IntMap.delete (fromIntegral id) capsets
+          }
+    _ ->
+      world
+
+setTimestamp :: Word64 -> World -> World
+setTimestamp timestamp world =
+  world { worldTimestamp = timestamp }
