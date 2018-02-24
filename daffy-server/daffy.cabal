@@ -69,6 +69,8 @@ library
   if os(linux)
     exposed-modules:
       Daffy.Eventlog
+  other-modules:
+    Daffy.Stats.Internal
   default-extensions:
     DataKinds
     DeriveGeneric

@@ -1,4 +1,5 @@
 {-# options_ghc -fno-warn-name-shadowing #-}
+{-# options_ghc -fno-warn-orphans        #-}
 
 -- | Parsing @+RTS -S@ statistics.
 
@@ -14,87 +15,22 @@ module Daffy.Stats
   ) where
 
 import Daffy.Proto.Response (Response)
+import Daffy.Stats.Internal
 
 import Data.Aeson (ToJSON)
 import Data.Attoparsec.ByteString.Char8 hiding (parse)
 
 import qualified Data.Text.Encoding as Text (encodeUtf8)
 
-data Stats = Stats
-  { garbageCollections           :: ![GCStats]
-  , generationSummaries          :: ![GenStats]
-  , parallelGarbageCollection    :: !(Maybe ParallelGCStats)
-  , tasks                        :: !(Maybe TasksStats)
-  , sparks                       :: !(Maybe SparksStats)
-  , runtimeInitTime              :: !Time
-  , mutatorTime                  :: !Time
-  , garbageCollectionTime        :: !Time
-  , retainerProfilingTime        :: !(Maybe Time)
-  , otherProfilingTime           :: !(Maybe Time)
-  , runtimeShutdownTime          :: !Time
-  , totalTime                    :: !Time
-  , percentGarbageCollectionTime :: !(Maybe Time)
-  } deriving (Eq, Generic, Show)
-
+instance ToJSON GCStats
+instance ToJSON GenStats
+instance ToJSON ParallelGCStats
+instance ToJSON SparksStats
 instance ToJSON Stats
+instance ToJSON TasksStats
+instance ToJSON Time
 
 type instance Response Stats = "stats"
-
-data GCStats = GCStats
-  { bytesAllocated  :: !Int
-  , bytesCopied     :: !Int
-  , liveBytes       :: !Int
-  , time            :: !Time
-  , totalTime       :: !Time
-  , pageFaults      :: !Int
-  , totalPageFaults :: !Int
-  , generation      :: !Int
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON GCStats
-
-data GenStats = GenStats
-  { parallel         :: !Int
-  , averagePauseTime :: !Double
-  , maxPauseTime     :: !Double
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON GenStats
-
-data ParallelGCStats = ParallelGCStats
-  { parallel :: !Double
-  , serial   :: !Double
-  , perfect  :: !Double
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON ParallelGCStats
-
-data TasksStats = TasksStats
-  { tasks        :: !Int
-  , bound        :: !Int
-  , peakWorkers  :: !Int
-  , totalWorkers :: !Int
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON TasksStats
-
-data SparksStats = SparksStats
-  { sparks           :: !Int
-  , converted        :: !Int
-  , overflowed       :: !Int
-  , dud              :: !Int
-  , garbageCollected :: !Int
-  , fizzled          :: !Int
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON SparksStats
-
-data Time = Time
-  { user    :: !Double
-  , elapsed :: !Double
-  } deriving (Eq, Generic, Show)
-
-instance ToJSON Time
 
 parse :: Text -> Either [Char] Stats
 parse =

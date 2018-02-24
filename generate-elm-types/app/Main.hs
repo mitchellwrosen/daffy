@@ -2,7 +2,7 @@
 
 import ElmCodegen
 
-import Daffy.Stats
+import Daffy.Stats.Internal
   (GCStats, GenStats, ParallelGCStats, SparksStats, Stats, TasksStats, Time)
 import Data.Proxy
 import Generics.SOP

@@ -99,8 +99,8 @@ rules stack = do
     orderOnly ["daffy-server/codegen/daffy.js"]
     files <- getDirectoryFiles "" ["daffy-server/src//*.hs", "daffy-server/app//*.hs"]
     need
-      ( ".shake/.gitmodules"
-      : "daffy-server/daffy.cabal"
+      ( "daffy-server/daffy.cabal"
+      : gitmodules
       : stackYaml
       : files
       )
@@ -109,13 +109,10 @@ rules stack = do
   "bin/generate-elm-types" %> \_ -> do
     files <- getDirectoryFiles "" ["generate-elm-types/src//*.hs", "generate-elm-types/app/Main.hs"]
     need
-      ( ".shake/.gitmodules"
-      : "generate-elm-types/generate-elm-types.cabal"
+      ( "generate-elm-types/generate-elm-types.cabal"
       : stackYaml
       : files
       )
-    cmd_ "mkdir -p daffy-server/codegen"
-    cmd_ "touch daffy-server/codegen/daffy.js"
     stack (cmd_ "stack install --fast --local-bin-path bin generate-elm-types:exe:generate-elm-types")
 
   "bin/Shakefile" %> \_ -> do
@@ -141,13 +138,17 @@ rules stack = do
   "daffy-server/codegen/daffy.js" %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
     need
-      ( ".shake/.gitmodules"
-      : ".shake/elm-package.json"
+      ( ".shake/elm-package.json"
       : "daffy-client/codegen/Daffy/Lenses.elm"
       : "daffy-client/codegen/Daffy/Types.elm"
+      : gitmodules
       : files
       )
     cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)
+
+gitmodules :: FilePath
+gitmodules =
+  ".shake/.gitmodules"
 
 stackYaml :: FilePath
 stackYaml =
