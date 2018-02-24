@@ -1,8 +1,8 @@
 resolver: lts-10.3
 packages:
-  - daffy-elm-codegen
   - daffy-server
   - daffy-shakefile
+  - generate-elm-types
 extra-deps:
   - base-noprelude-4.10.1.0
   - ghc-events-0.7.1

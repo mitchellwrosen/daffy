@@ -1,0 +1,15 @@
+# This module is used to generate:
+#
+#   daffy-client/codegen/Daffy/Lenses.elm
+
+command
+compaction
+eventlog
+largeObjectSize
+nurseryChunks
+nurserySize
+oldGenFactor
+oldGenMinSize
+prof
+runSpec
+stats

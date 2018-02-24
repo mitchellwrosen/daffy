@@ -6,7 +6,8 @@ import Control.Concurrent (newChan, readChan)
 import Control.Exception (SomeAsyncException(SomeAsyncException), fromException, throwIO, try)
 import Data.Functor (void)
 import Development.Shake
-import System.Directory (getCurrentDirectory)
+import Development.Shake.FilePath
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory)
 import System.Environment (getArgs, getEnvironment, withArgs)
 import System.FSNotify (eventPath, watchTreeChan, withManager)
 import System.Posix.Process (executeFile)
@@ -63,12 +64,8 @@ rules :: (forall a. Action a -> Action a) -> Rules ()
 rules stack = do
   -- The files we want to build, in no particular order.
   want
-    [ ".shake/.gitmodules"
-    , ".shake/elm-package.json"
-    , "bin/daffy"
-    , "bin/daffy-elm-codegen"
+    [ "bin/daffy"
     , "bin/Shakefile"
-    , "daffy-client/codegen/DaffyTypes.elm"
     , "daffy-server/codegen/daffy.js"
     ]
 
@@ -104,41 +101,54 @@ rules stack = do
     need
       ( ".shake/.gitmodules"
       : "daffy-server/daffy.cabal"
-      : "stack.yaml"
+      : stackYaml
       : files
       )
     stack (cmd_ "stack install --fast --flag daffy:development --local-bin-path bin daffy:exe:daffy")
 
-  "bin/daffy-elm-codegen" %> \_ -> do
-    files <- getDirectoryFiles "" ["daffy-elm-codegen/src//*.hs", "daffy-elm-codegen/app//*.hs"]
+  "bin/generate-elm-types" %> \_ -> do
+    files <- getDirectoryFiles "" ["generate-elm-types/src//*.hs", "generate-elm-types/app/Main.hs"]
     need
       ( ".shake/.gitmodules"
-      : "daffy-elm-codegen/daffy-elm-codegen.cabal"
-      : "stack.yaml"
+      : "generate-elm-types/generate-elm-types.cabal"
+      : stackYaml
       : files
       )
     cmd_ "mkdir -p daffy-server/codegen"
     cmd_ "touch daffy-server/codegen/daffy.js"
-    stack (cmd_ "stack install --fast --local-bin-path bin daffy-elm-codegen:exe:daffy-elm-codegen")
+    stack (cmd_ "stack install --fast --local-bin-path bin generate-elm-types:exe:generate-elm-types")
 
   "bin/Shakefile" %> \_ -> do
     need
       [ "daffy-shakefile/daffy-shakefile.cabal"
       , "daffy-shakefile/Shakefile.hs"
-      , "stack.yaml"
+      , stackYaml
       ]
     stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
 
-  "daffy-client/codegen/DaffyTypes.elm" %> \out -> do
-    need ["bin/daffy-elm-codegen"]
-    cmd_ (FileStdout out) "bin/daffy-elm-codegen"
+  "daffy-client/codegen/Daffy/Lenses.elm" %> \out -> do
+    let script = "generate-elm-lenses/generate-elm-lenses.sh"
+    let stub = "daffy-client/src/Daffy/Lenses.elm.stub"
+    need [script, stub]
+    liftIO (createDirectoryIfMissing True (takeDirectory out))
+    cmd_ (FileStdin stub) (FileStdout out) script
+
+  "daffy-client/codegen/Daffy/Types.elm" %> \out -> do
+    need ["bin/generate-elm-types"]
+    liftIO (createDirectoryIfMissing True (takeDirectory out))
+    cmd_ (FileStdout out) "bin/generate-elm-types"
 
   "daffy-server/codegen/daffy.js" %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
     need
       ( ".shake/.gitmodules"
       : ".shake/elm-package.json"
-      : "daffy-client/codegen/DaffyTypes.elm"
+      : "daffy-client/codegen/Daffy/Lenses.elm"
+      : "daffy-client/codegen/Daffy/Types.elm"
       : files
       )
     cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)
+
+stackYaml :: FilePath
+stackYaml =
+  "stack.yaml"

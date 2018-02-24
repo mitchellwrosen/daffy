@@ -2,9 +2,10 @@ module Main exposing (..)
 
 import Daffy.Lenses exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
+import Daffy.Types exposing (..)
+
 import Array exposing (Array)
 import Color
-import DaffyTypes exposing (..)
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events

@@ -10,7 +10,7 @@ import Generics.SOP
 main :: IO ()
 main =
   mapM_ putStrLn
-    [ "module DaffyTypes exposing (..)"
+    [ "module Daffy.Types exposing (..)"
     , ""
     , "import Json.Decode exposing (..)"
     , "import Json.Decode.Pipeline exposing (..)"
