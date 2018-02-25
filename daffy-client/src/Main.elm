@@ -42,17 +42,14 @@ main =
         }
 
 
-
--- TODO pull the "Initial state out of Model "
--- type alias SuperModel =
---     { nextSpec : RunSpec, pastRuns : List Model }
+type alias Model =
+    { runSpec : RunSpec, runs : List ProgramRun }
 
 
-type Model
-    = Initial RunSpec
-    | RunningProgram RunSpec ProgramOutput
-    | MsgParseError String
-    | ExploringRun RunSpec ProgramRun
+type ProgramRun
+    = RunningProgram RunSpec ProgramOutput
+    | MsgParseError RunSpec ProgramOutput String
+    | ExploringRun RunSpec ProgramOutput { exitCode : Int }
 
 
 type alias ProgramOutput =
@@ -72,15 +69,13 @@ type alias SvgPath =
     String
 
 
-type alias ProgramRun =
-    { output : Array Output
-    , exitCode : Int
-    , flamegraphs : List SvgPath
-    , stats : Maybe Stats
-    }
-
-
 type Msg
+    = ConfigureRun ConfigureRunMsg
+    | RunCommand
+    | RunningProgramMsg RunningProgramMsg
+
+
+type ConfigureRunMsg
     = TypeCommand String
     | TypeNurserySize String
     | TypeNurseryChunks String
@@ -91,8 +86,6 @@ type Msg
     | ToggleStats
     | ToggleProf
     | ToggleEventlog
-    | RunCommand
-    | RunningProgramMsg RunningProgramMsg
 
 
 type alias Index =
@@ -115,7 +108,7 @@ type RunningProgramMsg
 
 init : Model
 init =
-    Initial
+    { runSpec =
         { command = ""
         , nurserySize = ""
         , nurseryChunks = ""
@@ -127,107 +120,102 @@ init =
         , prof = False
         , eventlog = False
         }
+    , runs = []
+    }
 
 
 update : Msg -> Model -> Step Model Msg Never
 update msg model =
-    case ( model, msg ) of
-        ( Initial runSpec, TypeCommand s ) ->
-            runSpec
-                |> set commandL s
-                |> Initial
-                |> Step.to
+    case msg of
+        ConfigureRun runMsg ->
+            Step.to { model | runSpec = configureRun runMsg model.runSpec }
 
-        ( Initial runSpec, TypeNurserySize s ) ->
-            runSpec
-                |> set nurserySizeL s
-                |> Initial
-                |> Step.to
+        RunningProgramMsg runningProgramMsg ->
+            case model.runs of
+                (RunningProgram runSpec programOutput) :: moreRuns ->
+                    stepRunningProgram runningProgramMsg programOutput
+                        |> Step.map (RunningProgram runSpec)
+                        |> Step.onExit
+                            (\o ->
+                                Step.to <|
+                                    case o of
+                                        Ok exitCode ->
+                                            ExploringRun runSpec programOutput exitCode
 
-        ( Initial runSpec, TypeNurseryChunks s ) ->
-            runSpec
-                |> set nurseryChunksL s
-                |> Initial
-                |> Step.to
+                                        Err parseErr ->
+                                            MsgParseError runSpec programOutput parseErr
+                            )
+                        |> Step.map (\x -> { model | runs = x :: moreRuns })
 
-        ( Initial runSpec, TypeLargeObjectSize s ) ->
-            runSpec
-                |> set largeObjectSizeL s
-                |> Initial
-                |> Step.to
+                _ ->
+                    Step.noop
 
-        ( Initial runSpec, TypeOldGenMinSize s ) ->
-            runSpec
-                |> set oldGenMinSizeL s
-                |> Initial
+        RunCommand ->
+            { model
+                | runSpec = model.runSpec
+                , runs = RunningProgram model.runSpec { output = Array.empty, stats = Nothing, flamegraphs = [] } :: model.runs
+            }
                 |> Step.to
-
-        ( Initial runSpec, TypeOldGenFactor s ) ->
-            runSpec
-                |> set oldGenFactorL s
-                |> Initial
-                |> Step.to
-
-        ( Initial runSpec, ToggleCompaction ) ->
-            runSpec
-                |> set compactionL (not runSpec.compaction)
-                |> Initial
-                |> Step.to
-
-        ( Initial runSpec, ToggleStats ) ->
-            runSpec
-                |> set statsL (not runSpec.stats)
-                |> Initial
-                |> Step.to
-
-        ( Initial runSpec, ToggleProf ) ->
-            runSpec
-                |> set profL (not runSpec.prof)
-                |> Initial
-                |> Step.to
-
-        ( Initial runSpec, ToggleEventlog ) ->
-            runSpec
-                |> set eventlogL (not runSpec.eventlog)
-                |> Initial
-                |> Step.to
-
-        ( Initial runSpec, RunCommand ) ->
-            Step.to (RunningProgram runSpec { output = Array.empty, stats = Nothing, flamegraphs = [] })
                 |> Step.withCmd
-                    ([ ( "command", Json.Encode.string runSpec.command )
-                     , ( "stats", Json.Encode.bool runSpec.stats )
-                     , ( "prof", Json.Encode.bool runSpec.prof )
-                     , ( "eventlog", Json.Encode.bool runSpec.eventlog )
+                    ([ ( "command", Json.Encode.string model.runSpec.command )
+                     , ( "stats", Json.Encode.bool model.runSpec.stats )
+                     , ( "prof", Json.Encode.bool model.runSpec.prof )
+                     , ( "eventlog", Json.Encode.bool model.runSpec.eventlog )
                      ]
                         |> Json.Encode.object
                         |> Json.Encode.encode 0
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
-        ( RunningProgram model runningProgram, RunningProgramMsg programRunMsg ) ->
-            stepRunningProgram programRunMsg runningProgram
-                |> Step.map (\x -> RunningProgram model x)
-                |> Step.mapMsg RunningProgramMsg
-                |> Step.onExit
-                    (\result ->
-                        Step.to <|
-                            case result of
-                                Err parseErr ->
-                                    MsgParseError parseErr
 
-                                Ok run ->
-                                    ExploringRun model run
-                    )
+configureRun : ConfigureRunMsg -> RunSpec -> RunSpec
+configureRun runMsg runSpec =
+    case runMsg of
+        TypeCommand s ->
+            runSpec
+                |> set commandL s
 
-        _ ->
-            Step.noop
+        TypeNurserySize s ->
+            runSpec
+                |> set nurserySizeL s
+
+        TypeNurseryChunks s ->
+            runSpec
+                |> set nurseryChunksL s
+
+        TypeLargeObjectSize s ->
+            runSpec
+                |> set largeObjectSizeL s
+
+        TypeOldGenMinSize s ->
+            runSpec
+                |> set oldGenMinSizeL s
+
+        TypeOldGenFactor s ->
+            runSpec
+                |> set oldGenFactorL s
+
+        ToggleCompaction ->
+            runSpec
+                |> set compactionL (not runSpec.compaction)
+
+        ToggleStats ->
+            runSpec
+                |> set statsL (not runSpec.stats)
+
+        ToggleProf ->
+            runSpec
+                |> set profL (not runSpec.prof)
+
+        ToggleEventlog ->
+            runSpec
+                |> set eventlogL (not runSpec.eventlog)
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case model of
-        RunningProgram runningProgram _ ->
+    case List.head model.runs of
+        Just (RunningProgram runningProgram _) ->
             Sub.map RunningProgramMsg <|
                 WebSocket.listen "ws://localhost:8080"
                     (\raw ->
@@ -286,14 +274,14 @@ type alias ParseErr =
     String
 
 
-stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result String ProgramRun)
-stepRunningProgram programRunMsg ({ output, stats, flamegraphs } as programOutput) =
+stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput msg (Result ParseErr { exitCode : Int })
+stepRunningProgram programRunMsg programOutput =
     case programRunMsg of
         OutputMsg line ->
-            Step.to { programOutput | output = Array.push line output }
+            Step.to { programOutput | output = Array.push line programOutput.output }
 
         ExitedWith code ->
-            Step.exit (Ok { output = output, stats = stats, exitCode = code, flamegraphs = flamegraphs })
+            Step.exit (Ok { exitCode = code })
 
         RunStats stats ->
             Step.to { programOutput | stats = Just stats }
@@ -302,135 +290,139 @@ stepRunningProgram programRunMsg ({ output, stats, flamegraphs } as programOutpu
             Step.exit (Err err)
 
         FlamegraphMsg flamegraph ->
-            Step.to { programOutput | flamegraphs = flamegraph :: flamegraphs }
+            Step.to { programOutput | flamegraphs = flamegraph :: programOutput.flamegraphs }
 
 
 view : Model -> Html Msg
-view model =
+view ({ runSpec } as model) =
     div [ class "container" ] <|
-        [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
-            ++ case model of
-                Initial runSpec ->
-                    [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
-                        [ div [ class "form-group prompt-group" ]
-                            [ span [ class "ps1" ] [ text "$" ]
-                            , textInput runSpec.command
-                                TypeCommand
-                                [ Html.Attributes.autofocus True ]
-                            ]
-                        , viewPreview runSpec
-                        , div [ class "form-pair" ]
-                            [ div [ class "form-group" ]
-                                [ label
-                                    []
-                                    [ text "Nursery size" ]
-                                , textInput
-                                    runSpec.nurserySize
-                                    TypeNurserySize
-                                    [ class "tiny"
-                                    , Html.Attributes.placeholder "1m"
-                                    ]
-                                , span
-                                    [ class "inline-label" ]
-                                    [ text "split into" ]
-                                , textInput
-                                    runSpec.nurseryChunks
-                                    TypeNurseryChunks
-                                    [ class "tiny" ]
-                                , span [ class "inline-label" ]
-                                    [ text "chunks" ]
+        List.concat
+            [ [ h1 [ class "heading" ] [ text "🔥 daffy 🔥" ] ]
+            , [ Html.form [ class "command-form", Html.Events.onSubmit RunCommand ]
+                    << List.map (Html.map ConfigureRun)
+                <|
+                    [ div [ class "form-group prompt-group" ]
+                        [ span [ class "ps1" ] [ text "$" ]
+                        , textInput runSpec.command
+                            TypeCommand
+                            [ Html.Attributes.autofocus True ]
+                        ]
+                    , viewPreview runSpec
+                    , div [ class "form-pair" ]
+                        [ div [ class "form-group" ]
+                            [ label
+                                []
+                                [ text "Nursery size" ]
+                            , textInput
+                                runSpec.nurserySize
+                                TypeNurserySize
+                                [ class "tiny"
+                                , Html.Attributes.placeholder "1m"
                                 ]
-                            , div [ class "form-group" ]
-                                [ label
-                                    []
-                                    [ text "Large object size" ]
-                                , textInput
-                                    runSpec.largeObjectSize
-                                    TypeLargeObjectSize
-                                    [ Html.Attributes.placeholder <|
-                                        if String.isEmpty runSpec.nurserySize then
-                                            "1m"
-                                        else
-                                            runSpec.nurserySize
-                                    ]
-                                ]
-                            ]
-                        , div [ class "form-pair" ]
-                            [ div [ class "form-group" ]
-                                [ label
-                                    []
-                                    [ text "Minimum old generation size" ]
-                                , textInput
-                                    runSpec.oldGenMinSize
-                                    TypeOldGenMinSize
-                                    [ Html.Attributes.placeholder "1m" ]
-                                ]
-                            , div [ class "form-group" ]
-                                [ label
-                                    []
-                                    [ text "Old generation factor" ]
-                                , textInput
-                                    runSpec.oldGenFactor
-                                    TypeOldGenFactor
-                                    [ Html.Attributes.placeholder "2" ]
-                                ]
-                            ]
-                        , div [ class "form-group" ]
-                            [ span
+                            , span
                                 [ class "inline-label" ]
-                                [ text "Collect oldest generation by" ]
-                            , fieldset [] <|
-                                let
-                                    when b x =
-                                        if b then
-                                            Just x
-                                        else
-                                            Nothing
-                                in
-                                    List.concat
-                                        [ radio "Copying"
-                                            (runSpec.compaction == False)
-                                            (when (runSpec.compaction == True) ToggleCompaction)
-                                        , radio "Compacting"
-                                            (runSpec.compaction == True)
-                                            (when (runSpec.compaction == False) ToggleCompaction)
-                                        ]
+                                [ text "split into" ]
+                            , textInput
+                                runSpec.nurseryChunks
+                                TypeNurseryChunks
+                                [ class "tiny" ]
+                            , span [ class "inline-label" ]
+                                [ text "chunks" ]
                             ]
                         , div [ class "form-group" ]
                             [ label
-                                [ class "inline-label" ]
-                                (checkbox "stats" runSpec.stats (\_ -> ToggleStats) [])
-                            , label
-                                [ class "inline-label" ]
-                                (checkbox "profile" runSpec.prof (\_ -> ToggleProf) [])
-                            , label
-                                [ class "inline-label" ]
-                                (checkbox "eventlog" runSpec.eventlog (\_ -> ToggleEventlog) [])
-                            ]
-                        , div [ class "form-group" ]
-                            [ input
-                                [ class "btn"
-                                , type_ "submit"
-                                , Html.Attributes.value "Run"
-                                ]
                                 []
+                                [ text "Large object size" ]
+                            , textInput
+                                runSpec.largeObjectSize
+                                TypeLargeObjectSize
+                                [ Html.Attributes.placeholder <|
+                                    if String.isEmpty runSpec.nurserySize then
+                                        "1m"
+                                    else
+                                        runSpec.nurserySize
+                                ]
                             ]
                         ]
-                    , viewFlagsRequired runSpec
+                    , div [ class "form-pair" ]
+                        [ div [ class "form-group" ]
+                            [ label
+                                []
+                                [ text "Minimum old generation size" ]
+                            , textInput
+                                runSpec.oldGenMinSize
+                                TypeOldGenMinSize
+                                [ Html.Attributes.placeholder "1m" ]
+                            ]
+                        , div [ class "form-group" ]
+                            [ label
+                                []
+                                [ text "Old generation factor" ]
+                            , textInput
+                                runSpec.oldGenFactor
+                                TypeOldGenFactor
+                                [ Html.Attributes.placeholder "2" ]
+                            ]
+                        ]
+                    , div [ class "form-group" ]
+                        [ span
+                            [ class "inline-label" ]
+                            [ text "Collect oldest generation by" ]
+                        , fieldset [] <|
+                            let
+                                when b x =
+                                    if b then
+                                        Just x
+                                    else
+                                        Nothing
+                            in
+                                List.concat
+                                    [ radio "Copying"
+                                        (runSpec.compaction == False)
+                                        (when (runSpec.compaction == True) ToggleCompaction)
+                                    , radio "Compacting"
+                                        (runSpec.compaction == True)
+                                        (when (runSpec.compaction == False) ToggleCompaction)
+                                    ]
+                        ]
+                    , div [ class "form-group" ]
+                        [ label
+                            [ class "inline-label" ]
+                            (checkbox "stats" runSpec.stats (\_ -> ToggleStats) [])
+                        , label
+                            [ class "inline-label" ]
+                            (checkbox "profile" runSpec.prof (\_ -> ToggleProf) [])
+                        , label
+                            [ class "inline-label" ]
+                            (checkbox "eventlog" runSpec.eventlog (\_ -> ToggleEventlog) [])
+                        ]
+                    , div [ class "form-group" ]
+                        [ input
+                            [ class "btn"
+                            , type_ "submit"
+                            , Html.Attributes.value "Run"
+                            ]
+                            []
+                        ]
                     ]
-
-                RunningProgram programData programOutput ->
+              , viewFlagsRequired runSpec
+              ]
+            , case List.head model.runs of
+                Just (RunningProgram programData programOutput) ->
                     [ viewOutput programOutput ]
 
-                MsgParseError parseError ->
+                Just (MsgParseError _ _ parseError) ->
                     [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                ExploringRun programData programRun ->
-                    [ button [ class "btn btn-back", type_ "button" ] [ text "Back" ]
-                    , viewOutput programRun
-                    ]
-                        ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] []) programRun.flamegraphs
-                        ++ Maybe.unwrap [] (List.singleton << viewStats) programRun.stats
+                Just (ExploringRun runSpec programOutput exitCode) ->
+                    [ viewOutput programOutput ]
+                        ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
+                            programOutput.flamegraphs
+                        ++ Maybe.unwrap [] (List.singleton << viewStats) programOutput.stats
+
+                _ ->
+                    []
+            ]
 
 
 textInput : String -> (String -> a) -> List (Attribute a) -> Html a
@@ -618,8 +610,7 @@ viewBytesAllocatedSvg stats =
                 yscale
 
         point gc =
-            Svg.g
-                []
+            Svg.g []
                 [ Svg.circle
                     [ Svg.Attributes.cx <|
                         toString <|
