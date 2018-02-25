@@ -153,10 +153,17 @@ update msg model =
                     Step.noop
 
         RunCommand ->
-            { model
-                | runSpec = model.runSpec
-                , runs = RunningProgram model.runSpec { output = Array.empty, stats = Nothing, flamegraphs = [] } :: model.runs
-            }
+            model
+                |> over runsS
+                    (\runs ->
+                        RunningProgram
+                            model.runSpec
+                            { output = Array.empty
+                            , stats = Nothing
+                            , flamegraphs = []
+                            }
+                            :: runs
+                    )
                 |> Step.to
                 |> Step.withCmd
                     ([ ( "command", Json.Encode.string model.runSpec.command )
@@ -171,47 +178,37 @@ update msg model =
 
 
 configureRun : ConfigureRunMsg -> RunSpec -> RunSpec
-configureRun runMsg runSpec =
+configureRun runMsg =
     case runMsg of
         TypeCommand s ->
-            runSpec
-                |> set commandS s
+            set commandS s
 
         TypeNurserySize s ->
-            runSpec
-                |> set nurserySizeS s
+            set nurserySizeS s
 
         TypeNurseryChunks s ->
-            runSpec
-                |> set nurseryChunksS s
+            set nurseryChunksS s
 
         TypeLargeObjectSize s ->
-            runSpec
-                |> set largeObjectSizeS s
+            set largeObjectSizeS s
 
         TypeOldGenMinSize s ->
-            runSpec
-                |> set oldGenMinSizeS s
+            set oldGenMinSizeS s
 
         TypeOldGenFactor s ->
-            runSpec
-                |> set oldGenFactorS s
+            set oldGenFactorS s
 
         ToggleCompaction ->
-            runSpec
-                |> set compactionS (not runSpec.compaction)
+            over compactionS not
 
         ToggleStats ->
-            runSpec
-                |> set statsS (not runSpec.stats)
+            over statsS not
 
         ToggleProf ->
-            runSpec
-                |> set profS (not runSpec.prof)
+            over profS not
 
         ToggleEventlog ->
-            runSpec
-                |> set eventlogS (not runSpec.eventlog)
+            over eventlogS not
 
 
 subscriptions : Model -> Sub Msg
@@ -524,6 +521,7 @@ viewStats stats =
                 --     ]
                 -- , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
                 ]
+
 
 
 -- chartConfig : (data -> Float) -> (data -> Float) -> LineChart.Config data msg
