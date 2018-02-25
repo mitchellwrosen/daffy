@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
+import Daffy.Scatterplot
 import Daffy.Setters exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
@@ -23,6 +24,7 @@ import LineChart.Junk as Junk
 import LineChart.Legends as Legends
 import LineChart.Line as Line
 import List.Extra as List
+import List.Nonempty as Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
 import Step exposing (Step)
 import Svg exposing (Svg)
@@ -503,423 +505,103 @@ viewOutput { output } =
 
 viewStats : Stats -> Html msg
 viewStats stats =
-    let
-        elapsedTimeGCs : List ElapsedTimeGCStats
-        elapsedTimeGCs =
-            Daffy.ElapsedTimeGCStats.make stats.garbageCollections
-    in
-        div []
-            [ viewBytesAllocatedSvg elapsedTimeGCs
-            , viewBytesCopiedSvg elapsedTimeGCs
-            , viewLiveBytesSvg elapsedTimeGCs
-            , viewNumGCsSvg elapsedTimeGCs
+    case Nonempty.fromList (Daffy.ElapsedTimeGCStats.make stats.garbageCollections) of
+        Nothing ->
+            text ""
 
-            --   LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
-            --     [ LineChart.line (Color.rgb 255 99 71)
-            --         Dots.none
-            --         "Last Run"
-            --         elapsedTimeGCs
-            --     ]
-            -- , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
-            ]
+        Just elapsedTimeGCs ->
+            div []
+                [ viewBytesAllocatedSvg elapsedTimeGCs
+                , viewBytesCopiedSvg elapsedTimeGCs
+                , viewLiveBytesSvg elapsedTimeGCs
+                , viewNumGCsSvg elapsedTimeGCs
+
+                --   LineChart.viewCustom (chartConfig .totalTimeElapsed .averageLiveBytes)
+                --     [ LineChart.line (Color.rgb 255 99 71)
+                --         Dots.none
+                --         "Last Run"
+                --         elapsedTimeGCs
+                --     ]
+                -- , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
+                ]
 
 
-chartConfig : (data -> Float) -> (data -> Float) -> LineChart.Config data msg
-chartConfig x y =
-    { x = Axis.default 1000 "Time Elapsed" x
-    , y = Axis.default 600 "Bytes" y
-    , container = Container.responsive "line-chart-1"
-    , interpolation = Interpolation.stepped
-    , intersection = Intersection.default
-    , legends = Legends.default
-    , events = Events.default
-    , junk = Junk.default
-    , grid = Grid.default
-    , area = Area.default
-    , line = Line.default
-    , dots = Dots.custom (Dots.full 0)
+-- chartConfig : (data -> Float) -> (data -> Float) -> LineChart.Config data msg
+-- chartConfig x y =
+--     { x = Axis.default 1000 "Time Elapsed" x
+--     , y = Axis.default 600 "Bytes" y
+--     , container = Container.responsive "line-chart-1"
+--     , interpolation = Interpolation.stepped
+--     , intersection = Intersection.default
+--     , legends = Legends.default
+--     , events = Events.default
+--     , junk = Junk.default
+--     , grid = Grid.default
+--     , area = Area.default
+--     , line = Line.default
+--     , dots = Dots.custom (Dots.full 0)
+--     }
+
+
+width =
+    800
+
+
+height =
+    500
+
+
+margin =
+    { bottom = 25
+    , top = 10
+    , left = 60
+    , right = 20
     }
 
 
-margin : { bottom : number, left : number1, right : number2, top : number3 }
-margin =
-    { top = 20, right = 40, bottom = 20, left = 40 }
+viewBytesAllocatedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewBytesAllocatedSvg =
+    Daffy.Scatterplot.svg
+        { width = width
+        , height = height
+        , margin = margin
+        , getX = .time
+        , getY = \x -> toFloat (x.bytesAllocated // x.count)
+        , getR = \x -> 2 * (x.generation + 1)
+        }
 
 
-( width, height ) =
-    ( 800 - margin.left - margin.right, 500 - margin.top - margin.bottom )
+viewBytesCopiedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewBytesCopiedSvg =
+    Daffy.Scatterplot.svg
+        { width = width
+        , height = height
+        , margin = margin
+        , getX = .time
+        , getY = \x -> toFloat (x.bytesCopied // x.count)
+        , getR = \x -> 2 * (x.generation + 1)
+        }
 
 
-viewBytesAllocatedSvg : List ElapsedTimeGCStats -> Svg msg
-viewBytesAllocatedSvg stats =
-    let
-        xscale : ContinuousScale
-        xscale =
-            let
-                xmax : Float
-                xmax =
-                    stats
-                        |> List.last
-                        |> Maybe.unwrap 0 .time
-            in
-                VScale.linear ( 0, xmax ) ( 0, width )
-
-        yscale : ContinuousScale
-        yscale =
-            let
-                ymin : Float
-                ymin =
-                    stats
-                        |> List.map (\x -> toFloat (x.bytesAllocated // x.count))
-                        |> List.minimum
-                        |> Maybe.withDefault 0
-
-                ymax : Float
-                ymax =
-                    stats
-                        |> List.map (\x -> toFloat (x.bytesAllocated // x.count))
-                        |> List.maximum
-                        |> Maybe.withDefault 0
-            in
-                VScale.linear ( ymin, ymax ) ( height, 0 )
-
-        xaxis : Svg msg
-        xaxis =
-            VAxis.axis
-                { orientation = VAxis.Bottom
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                xscale
-
-        yaxis : Svg msg
-        yaxis =
-            VAxis.axis
-                { orientation = VAxis.Left
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                yscale
-
-        point gc =
-            Svg.g []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <|
-                        toString <|
-                            VScale.convert xscale gc.time
-                    , Svg.Attributes.cy <|
-                        toString <|
-                            VScale.convert yscale <|
-                                toFloat <|
-                                    gc.bytesAllocated
-                                        // gc.count
-                    , Svg.Attributes.r <|
-                        toString <|
-                            2
-                                * (gc.generation + 1)
-                    ]
-                    []
-                ]
-    in
-        Svg.svg
-            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
-            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
-            ]
-            [ Svg.g
-                [ transformTranslate ( margin.left, margin.top ) ]
-                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
-                , Svg.g [] [ yaxis ]
-                , Svg.g [] (List.map point stats)
-                ]
-            ]
+viewLiveBytesSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewLiveBytesSvg =
+    Daffy.Scatterplot.svg
+        { width = width
+        , height = height
+        , margin = margin
+        , getX = .time
+        , getY = \x -> toFloat (x.liveBytes // x.count)
+        , getR = \x -> 2 * (x.generation + 1)
+        }
 
 
-viewBytesCopiedSvg : List ElapsedTimeGCStats -> Svg msg
-viewBytesCopiedSvg stats =
-    let
-        xscale : ContinuousScale
-        xscale =
-            let
-                xmax : Float
-                xmax =
-                    stats
-                        |> List.last
-                        |> Maybe.unwrap 0 .time
-            in
-                VScale.linear ( 0, xmax ) ( 0, width )
-
-        yscale : ContinuousScale
-        yscale =
-            let
-                ymin : Float
-                ymin =
-                    stats
-                        |> List.map (\x -> toFloat (x.bytesCopied // x.count))
-                        |> List.minimum
-                        |> Maybe.withDefault 0
-
-                ymax : Float
-                ymax =
-                    stats
-                        |> List.map (\x -> toFloat (x.bytesCopied // x.count))
-                        |> List.maximum
-                        |> Maybe.withDefault 0
-            in
-                VScale.linear ( ymin, ymax ) ( height, 0 )
-
-        xaxis : Svg msg
-        xaxis =
-            VAxis.axis
-                { orientation = VAxis.Bottom
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                xscale
-
-        yaxis : Svg msg
-        yaxis =
-            VAxis.axis
-                { orientation = VAxis.Left
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                yscale
-
-        point gc =
-            Svg.g
-                []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <|
-                        toString <|
-                            VScale.convert xscale gc.time
-                    , Svg.Attributes.cy <|
-                        toString <|
-                            VScale.convert yscale <|
-                                toFloat <|
-                                    gc.bytesCopied
-                                        // gc.count
-                    , Svg.Attributes.r <|
-                        toString <|
-                            2
-                                * (gc.generation + 1)
-                    ]
-                    []
-                ]
-    in
-        Svg.svg
-            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
-            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
-            ]
-            [ Svg.g
-                [ transformTranslate ( margin.left, margin.top ) ]
-                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
-                , Svg.g [] [ yaxis ]
-                , Svg.g [] (List.map point stats)
-                ]
-            ]
-
-
-viewLiveBytesSvg : List ElapsedTimeGCStats -> Svg msg
-viewLiveBytesSvg stats =
-    let
-        xscale : ContinuousScale
-        xscale =
-            let
-                xmax : Float
-                xmax =
-                    stats
-                        |> List.last
-                        |> Maybe.unwrap 0 .time
-            in
-                VScale.linear ( 0, xmax ) ( 0, width )
-
-        yscale : ContinuousScale
-        yscale =
-            let
-                ymin : Float
-                ymin =
-                    stats
-                        |> List.map (\x -> toFloat (x.liveBytes // x.count))
-                        |> List.minimum
-                        |> Maybe.withDefault 0
-
-                ymax : Float
-                ymax =
-                    stats
-                        |> List.map (\x -> toFloat (x.liveBytes // x.count))
-                        |> List.maximum
-                        |> Maybe.withDefault 0
-            in
-                VScale.linear ( ymin, ymax ) ( height, 0 )
-
-        xaxis : Svg msg
-        xaxis =
-            VAxis.axis
-                { orientation = VAxis.Bottom
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                xscale
-
-        yaxis : Svg msg
-        yaxis =
-            VAxis.axis
-                { orientation = VAxis.Left
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                yscale
-
-        point gc =
-            Svg.g
-                []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <|
-                        toString <|
-                            VScale.convert xscale gc.time
-                    , Svg.Attributes.cy <|
-                        toString <|
-                            VScale.convert yscale <|
-                                toFloat <|
-                                    gc.liveBytes
-                                        // gc.count
-                    , Svg.Attributes.r <|
-                        toString <|
-                            2
-                                * (gc.generation + 1)
-                    ]
-                    []
-                ]
-    in
-        Svg.svg
-            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
-            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
-            ]
-            [ Svg.g
-                [ transformTranslate ( margin.left, margin.top ) ]
-                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
-                , Svg.g [] [ yaxis ]
-                , Svg.g [] (List.map point stats)
-                ]
-            ]
-
-
-viewNumGCsSvg : List ElapsedTimeGCStats -> Svg msg
-viewNumGCsSvg stats =
-    let
-        xscale : ContinuousScale
-        xscale =
-            let
-                xmax : Float
-                xmax =
-                    stats
-                        |> List.last
-                        |> Maybe.unwrap 0 .time
-            in
-                VScale.linear ( 0, xmax ) ( 0, width )
-
-        yscale : ContinuousScale
-        yscale =
-            let
-                ymax : Float
-                ymax =
-                    stats
-                        |> List.map .count
-                        |> List.maximum
-                        |> Maybe.unwrap 0 toFloat
-            in
-                VScale.linear ( 0, ymax ) ( height, 0 )
-
-        xaxis : Svg msg
-        xaxis =
-            VAxis.axis
-                { orientation = VAxis.Bottom
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                xscale
-
-        yaxis : Svg msg
-        yaxis =
-            VAxis.axis
-                { orientation = VAxis.Left
-                , ticks = Nothing
-                , tickFormat = Nothing
-                , tickCount = 10
-                , tickSizeInner = 6
-                , tickSizeOuter = 6
-                , tickPadding = 3
-                }
-                yscale
-
-        point gc =
-            Svg.g
-                []
-                [ Svg.circle
-                    [ Svg.Attributes.cx <|
-                        toString <|
-                            VScale.convert xscale gc.time
-                    , Svg.Attributes.cy <|
-                        toString <|
-                            VScale.convert yscale <|
-                                toFloat <|
-                                    gc.count
-                    , Svg.Attributes.r <|
-                        toString <|
-                            2
-                                * (gc.generation + 1)
-                    ]
-                    []
-                ]
-    in
-        Svg.svg
-            [ Svg.Attributes.width (toString (width + margin.left + margin.right))
-            , Svg.Attributes.height (toString (height + margin.top + margin.bottom))
-            ]
-            [ Svg.g
-                [ transformTranslate ( margin.left, margin.top ) ]
-                [ Svg.g [ transformTranslate ( 0, height ) ] [ xaxis ]
-                , Svg.g [] [ yaxis ]
-                , Svg.g [] (List.map point stats)
-                ]
-            ]
-
-
-transformTranslate : ( a, b ) -> Svg.Attribute msg
-transformTranslate ( x, y ) =
-    Svg.Attributes.transform <|
-        String.concat
-            [ "translate("
-            , toString x
-            , ","
-            , toString y
-            , ")"
-            ]
+viewNumGCsSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewNumGCsSvg =
+    Daffy.Scatterplot.svg
+        { width = width
+        , height = height
+        , margin = margin
+        , getX = .time
+        , getY = toFloat << .count
+        , getR = \x -> 2 * (x.generation + 1)
+        }
