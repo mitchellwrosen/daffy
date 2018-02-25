@@ -1,14 +1,14 @@
 # This module is used to generate:
 #
-#   daffy-client/codegen/Daffy/Lenses.elm
+#   daffy-client/codegen/Daffy/Setters.elm
 #
 # As an example, the following line
 #
 #   foo
 #
-# would generate the following "lens":
+# would generate the following setter:
 #
-#   fooL : (a -> b) -> { r | foo : a } -> { r | foo : b }
+#   fooS : (a -> b) -> { r | foo : a } -> { r | foo : b }
 
 command
 compaction

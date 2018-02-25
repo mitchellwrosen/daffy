@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
-import Daffy.Lenses exposing (..)
+import Daffy.Setters exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
 import Array exposing (Array)
@@ -173,43 +173,43 @@ configureRun runMsg runSpec =
     case runMsg of
         TypeCommand s ->
             runSpec
-                |> set commandL s
+                |> set commandS s
 
         TypeNurserySize s ->
             runSpec
-                |> set nurserySizeL s
+                |> set nurserySizeS s
 
         TypeNurseryChunks s ->
             runSpec
-                |> set nurseryChunksL s
+                |> set nurseryChunksS s
 
         TypeLargeObjectSize s ->
             runSpec
-                |> set largeObjectSizeL s
+                |> set largeObjectSizeS s
 
         TypeOldGenMinSize s ->
             runSpec
-                |> set oldGenMinSizeL s
+                |> set oldGenMinSizeS s
 
         TypeOldGenFactor s ->
             runSpec
-                |> set oldGenFactorL s
+                |> set oldGenFactorS s
 
         ToggleCompaction ->
             runSpec
-                |> set compactionL (not runSpec.compaction)
+                |> set compactionS (not runSpec.compaction)
 
         ToggleStats ->
             runSpec
-                |> set statsL (not runSpec.stats)
+                |> set statsS (not runSpec.stats)
 
         ToggleProf ->
             runSpec
-                |> set profL (not runSpec.prof)
+                |> set profS (not runSpec.prof)
 
         ToggleEventlog ->
             runSpec
-                |> set eventlogL (not runSpec.eventlog)
+                |> set eventlogS (not runSpec.eventlog)
 
 
 subscriptions : Model -> Sub Msg

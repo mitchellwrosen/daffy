@@ -141,11 +141,11 @@ rules stack = do
       ]
     stack (cmd_ "stack install --local-bin-path bin daffy-shakefile:exe:Shakefile")
 
-  "daffy-client/codegen/Daffy/Lenses.elm" %> \out -> do
-    let stub = "daffy-client/src/Daffy/Lenses.elm.stub"
-    need [generateElmLensesExe, stub]
+  "daffy-client/codegen/Daffy/Setters.elm" %> \out -> do
+    let stub = "daffy-client/src/Daffy/Setters.elm.stub"
+    need [generateElmSettersExe, stub]
     mkdir (takeDirectory out)
-    cmd_ (FileStdin stub) (FileStdout out) generateElmLensesExe
+    cmd_ (FileStdin stub) (FileStdout out) generateElmSettersExe
 
   "daffy-client/codegen/Daffy/Types.elm" %> \out -> do
     need [generateElmTypesExe]
@@ -155,7 +155,7 @@ rules stack = do
   daffyJs %> \out -> do
     files <- getDirectoryFiles "" ["daffy-client/src//*.elm"]
     need
-      ( "daffy-client/codegen/Daffy/Lenses.elm"
+      ( "daffy-client/codegen/Daffy/Setters.elm"
       : "daffy-client/codegen/Daffy/Types.elm"
       : elmDepsStamp
       : gitmodulesStamp
@@ -182,14 +182,14 @@ parseElmDependencies blob =
 mkdir :: MonadIO m => FilePath -> m ()
 mkdir = liftIO . createDirectoryIfMissing True
 
-daffyExe, daffyJs, elmDeps, elmDepsStamp, generateElmLensesExe,
+daffyExe, daffyJs, elmDeps, elmDepsStamp, generateElmSettersExe,
   generateElmTypesExe, gitmodulesStamp, shakefileExe, stackYaml :: [Char]
-daffyExe             = "bin/daffy"
-daffyJs              = "daffy-server/codegen/daffy.js"
-elmDeps              = ".shake/elm-deps"
-elmDepsStamp         = ".shake/elm-deps.stamp"
-gitmodulesStamp      = ".shake/gitmodules.stamp"
-generateElmLensesExe = "generate-elm-lenses/generate-elm-lenses.sh"
-generateElmTypesExe  = "bin/generate-elm-types"
-shakefileExe         = "bin/Shakefile"
-stackYaml            = "stack.yaml"
+daffyExe              = "bin/daffy"
+daffyJs               = "daffy-server/codegen/daffy.js"
+elmDeps               = ".shake/elm-deps"
+elmDepsStamp          = ".shake/elm-deps.stamp"
+gitmodulesStamp       = ".shake/gitmodules.stamp"
+generateElmSettersExe = "generate-elm-setters/generate-elm-setters.sh"
+generateElmTypesExe   = "bin/generate-elm-types"
+shakefileExe          = "bin/Shakefile"
+stackYaml             = "stack.yaml"

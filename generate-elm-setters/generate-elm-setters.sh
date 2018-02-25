@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "module Daffy.Lenses exposing (..)"
+echo "module Daffy.Setters exposing (..)"
 echo ""
 echo "over : ((a -> b) -> s -> t) -> (a -> b) -> s -> t"
 echo "over = identity"
@@ -21,9 +21,9 @@ while read S; do
     continue
   fi
 
-  # For each line 'foo', generate a 'fooL'.
+  # For each line 'foo', generate a setter 'fooS'.
 
   echo ""
-  echo "${S}L : (a -> b) -> { r | $S : a } -> { r | $S : b }"
-  echo "${S}L f x = { x | $S = f x.$S }"
+  echo "${S}S : (a -> b) -> { r | $S : a } -> { r | $S : b }"
+  echo "${S}S f x = { x | $S = f x.$S }"
 done
