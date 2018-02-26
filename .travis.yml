@@ -19,4 +19,5 @@ install:
 - stack --no-terminal --install-ghc test --only-dependencies
 
 script:
+- touch daffy-server/codegen/daffy.js
 - stack --no-terminal test --haddock --no-haddock-deps

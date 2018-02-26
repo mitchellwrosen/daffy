@@ -37,7 +37,7 @@ eventlogSpec = do
     forM_ files $ \file ->
       it file $
         withBinaryFile ("test/files/eventlog/" ++ file) ReadMode $ \handle ->
-          Streaming.effects (Eventlog.parse file handle)
+          Streaming.effects (Eventlog.parse handle)
 
 infoSpec :: Spec
 infoSpec = do

@@ -7,56 +7,62 @@ import System.Random
 
 main :: IO ()
 main = do
-  [n] <- getArgs
+  [n] <- map read <$> getArgs
   let (xs, ys) = splitAt n (take (2*n) (randoms (mkStdGen 1)))
   print (editDistance (xs :: [Char]) ys)
 
 editDistance :: Eq a => [a] -> [a] -> Int
 editDistance a b = last $
   case () of
-    _ | lab == 0
-     -> mainDiag
-      | lab > 0
-     -> lowers !! (lab - 1)
+    _ | lab a b == 0
+     -> mainDiag a b
+      | lab a b > 0
+     -> lowers a b !! (lab a b - 1)
       | otherwise
-     -> uppers !! (-1 - lab)
+     -> uppers a b !! (-1 - lab a b)
+
+mainDiag a b = oneDiag a b (head (uppers a b)) (-1 : head (lowers a b))
+
+uppers a b = eachDiag a b (mainDiag a b : uppers a b) -- upper diagonals
+
+lowers a b = eachDiag b a (mainDiag a b : lowers a b) -- lower diagonals
+
+eachDiag _ [] _ = []
+eachDiag _ _ [] = []
+eachDiag a' (_:bs) (lastDiag:diags) =
+  oneDiag a' bs (nextDiag diags) lastDiag : eachDiag a' bs diags
+
+nextDiag diags = head (tail diags)
+
+oneDiag a' b' diagAbove diagBelow = thisdiag a' b' diagAbove diagBelow
+
+doDiag [] _ _ _ _ = []
+doDiag _ [] _ _ _ = []
+-- Check for a transposition
+-- We don't add anything to nw here, the next character
+-- will be different however and the transposition
+-- will have an edit distance of 1.
+doDiag (ach:ach':as) (bch:bch':bs) nw n w
+  | ach' == bch && ach == bch'
+  = nw : (doDiag (ach' : as) (bch' : bs) nw (tail n) (tail w))
+-- Standard case
+doDiag (ach:as) (bch:bs) nw n w =
+  me : (doDiag as bs me (tail n) (tail w))
   where
-    mainDiag = oneDiag a b (head uppers) (-1 : head lowers)
-    uppers = eachDiag a b (mainDiag : uppers) -- upper diagonals
-    lowers = eachDiag b a (mainDiag : lowers) -- lower diagonals
+    me =
+      if ach == bch
+        then nw
+        else 1 + min3 (head w) nw (head n)
 
-    eachDiag _ [] _ = []
-    eachDiag _ _ [] = []
-    eachDiag a' (_:bs) (lastDiag:diags) =
-      oneDiag a' bs nextDiag lastDiag : eachDiag a' bs diags
-      where
-        nextDiag = head (tail diags)
+firstelt diagBelow = 1 + head diagBelow
 
-    oneDiag a' b' diagAbove diagBelow = thisdiag
-      where
-        doDiag [] _ _ _ _ = []
-        doDiag _ [] _ _ _ = []
-        -- Check for a transposition
-        -- We don't add anything to nw here, the next character
-        -- will be different however and the transposition
-        -- will have an edit distance of 1.
-        doDiag (ach:ach':as) (bch:bch':bs) nw n w
-          | ach' == bch && ach == bch'
-          = nw : (doDiag (ach' : as) (bch' : bs) nw (tail n) (tail w))
-        -- Standard case
-        doDiag (ach:as) (bch:bs) nw n w =
-          me : (doDiag as bs me (tail n) (tail w))
-          where
-            me =
-              if ach == bch
-                then nw
-                else 1 + min3 (head w) nw (head n)
-        firstelt = 1 + head diagBelow
-        thisdiag = firstelt : doDiag a' b' firstelt diagAbove (tail diagBelow)
+thisdiag a' b' diagAbove diagBelow =
+  firstelt diagBelow
+    : doDiag a' b' (firstelt diagBelow) diagAbove (tail diagBelow)
 
-    lab = length a - length b
+lab a b = length a - length b
 
-    min3 x y z =
-      if x < y
-        then x
-        else min y z
+min3 x y z =
+  if x < y
+    then x
+    else min y z
