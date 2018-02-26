@@ -1,5 +1,8 @@
 module Daffy.RunSpec exposing (..)
 
+import Daffy.List.Extra as List
+import Daffy.Proto.RunReq exposing (RunReq)
+
 
 type alias RunSpec =
     { command : String
@@ -15,73 +18,57 @@ type alias RunSpec =
     }
 
 
+{-| List the GHC options a program must have been compile with in order to
+satisfy this `RunSpec`.
+-}
 ghcFlags : RunSpec -> List String
 ghcFlags spec =
     List.concat
-        [ if spec.eventlog then
-            [ "-eventlog" ]
-          else
-            []
-        , if spec.prof then
-            [ "-prof" ]
-          else
-            []
-        , if
-            not (String.isEmpty spec.nurserySize)
-                || not (String.isEmpty spec.nurseryChunks)
-                || not (String.isEmpty spec.largeObjectSize)
-                || not (String.isEmpty spec.oldGenMinSize)
-                || not (String.isEmpty spec.oldGenFactor)
-                || spec.compaction
-                || spec.stats
-                || spec.prof
-                || spec.eventlog
-          then
-            [ "-rtsopts" ]
-          else
-            [ ]
+        [ List.when spec.eventlog "-eventlog"
+        , List.when spec.prof "-prof"
+        , List.when
+            (List.or
+                [ not (String.isEmpty spec.nurserySize)
+                , not (String.isEmpty spec.nurseryChunks)
+                , not (String.isEmpty spec.largeObjectSize)
+                , not (String.isEmpty spec.oldGenMinSize)
+                , not (String.isEmpty spec.oldGenFactor)
+                , spec.compaction
+                , spec.stats
+                , spec.prof
+                , spec.eventlog
+                ]
+            )
+            "-rtsopts"
         ]
 
 
+{-| List the RTS flags associated with this `RunSpec` (for pedagogical purposes,
+not for the server, because some flags, e.g. `-l`, need to be passed
+separately).
+-}
 rtsFlags : RunSpec -> List String
 rtsFlags spec =
     List.concat
-        [ if String.isEmpty spec.nurserySize then
-            []
-          else
-            [ "-A" ++ spec.nurserySize ]
-        , if String.isEmpty spec.largeObjectSize then
-            []
-          else
-            [ "-AL" ++ spec.largeObjectSize ]
-        , if spec.compaction then
-            [ "-c" ]
-          else
-            []
-        , if String.isEmpty spec.oldGenFactor then
-            []
-          else
-            [ "-F" ++ spec.oldGenFactor ]
-        , if String.isEmpty spec.nurseryChunks then
-            []
-          else
-            [ "-n" ++ spec.nurseryChunks ]
-        , if String.isEmpty spec.oldGenMinSize then
-            []
-          else
-            [ "-o" ++ spec.oldGenMinSize ]
-        , if spec.eventlog then
-            [ "-l" ]
-          else
-            []
-        , if spec.prof then
-            [ "-pa" ]
-          else
-            []
-        , if spec.stats then
-            [ "-S" ]
-          else
-            []
+        [ List.unless
+            (String.isEmpty spec.nurserySize)
+            ("-A" ++ spec.nurserySize)
+        , List.unless
+            (String.isEmpty spec.largeObjectSize)
+            ("-AL" ++ spec.largeObjectSize)
+        , List.when spec.compaction "-c"
+        , List.unless
+            (String.isEmpty spec.oldGenFactor)
+            ("-F" ++ spec.oldGenFactor)
+        , List.when spec.eventlog "-l"
+        , List.unless
+            (String.isEmpty spec.nurseryChunks)
+            ("-n" ++ spec.nurseryChunks)
+        , List.unless
+            (String.isEmpty spec.oldGenMinSize)
+            ("-o" ++ spec.oldGenMinSize)
+        , List.when spec.prof "-pa"
+        , List.when spec.stats "-S"
         ]
 
 
@@ -96,3 +83,40 @@ preview spec =
 
             flags ->
                 String.join " " <| spec.command :: "+RTS" :: flags
+
+
+{-| Make a `RunReq` with a `RunSpec`
+-}
+toReq : RunSpec -> RunReq
+toReq spec =
+    let
+        flags : List String
+        flags =
+            List.concat
+                [ List.unless
+                    (String.isEmpty spec.nurserySize)
+                    ("-A" ++ spec.nurserySize)
+                , List.unless
+                    (String.isEmpty spec.largeObjectSize)
+                    ("-AL" ++ spec.largeObjectSize)
+                , List.when spec.compaction "-c"
+                , List.unless
+                    (String.isEmpty spec.oldGenFactor)
+                    ("-F" ++ spec.oldGenFactor)
+                , List.unless
+                    (String.isEmpty spec.nurseryChunks)
+                    ("-n" ++ spec.nurseryChunks)
+                , List.unless
+                    (String.isEmpty spec.oldGenMinSize)
+                    ("-o" ++ spec.oldGenMinSize)
+                ]
+    in
+        { command =
+            if List.isEmpty flags then
+                spec.command
+            else
+                String.join " " <| spec.command :: "+RTS" :: flags ++ ["-RTS"]
+        , stats = spec.stats
+        , prof = spec.prof
+        , eventlog = spec.eventlog
+        }

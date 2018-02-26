@@ -3,6 +3,11 @@ module Daffy.List.Extra exposing (..)
 import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 
 
+or : List Bool -> Bool
+or =
+    List.foldl (||) False
+
+
 cons : a -> List a -> List a
 cons =
     (::)
@@ -22,4 +27,20 @@ groupBy f =
                 [] ->
                     [ Nonempty x [] ]
         )
+        []
+
+
+unless : Bool -> a -> List a
+unless b x =
+    if b then
+        []
+    else
+        [ x ]
+
+
+when : Bool -> a -> List a
+when b x =
+    if b then
+        [ x ]
+    else
         []

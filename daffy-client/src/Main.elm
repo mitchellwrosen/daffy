@@ -3,6 +3,7 @@ module Main exposing (..)
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
 import Daffy.Html exposing (checkbox, radio, textInput)
 import Daffy.List.Extra as List
+import Daffy.Proto.RunReq
 import Daffy.Scatterplot
 import Daffy.Setters exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
@@ -168,13 +169,9 @@ update msg model =
                     )
                 |> Step.to
                 |> Step.withCmd
-                    ([ ( "command", Json.Encode.string model.runSpec.command )
-                     , ( "stats", Json.Encode.bool model.runSpec.stats )
-                     , ( "prof", Json.Encode.bool model.runSpec.prof )
-                     , ( "eventlog", Json.Encode.bool model.runSpec.eventlog )
-                     ]
-                        |> Json.Encode.object
-                        |> Json.Encode.encode 0
+                    (model.runSpec
+                        |> Daffy.RunSpec.toReq
+                        |> Daffy.Proto.RunReq.encode
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
