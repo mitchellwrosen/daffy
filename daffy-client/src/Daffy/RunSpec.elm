@@ -33,12 +33,13 @@ ghcFlags spec =
                 || not (String.isEmpty spec.oldGenMinSize)
                 || not (String.isEmpty spec.oldGenFactor)
                 || spec.compaction
-                || spec.eventlog
+                || spec.stats
                 || spec.prof
+                || spec.eventlog
           then
-            []
-          else
             [ "-rtsopts" ]
+          else
+            [ ]
         ]
 
 
