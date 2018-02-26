@@ -1,5 +1,6 @@
 module Daffy.Scatterplot exposing (Config, svg)
 
+import Daffy.Extent as Extent exposing (Extent)
 import Daffy.Svg
 import List.Extra as List exposing (last)
 import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
@@ -19,6 +20,7 @@ type alias Config a =
         , right : Float
         , top : Float
         }
+    , extent : Extent -> Extent
     , getX : a -> Float
     , getY : a -> Float
     , getR : a -> Int
@@ -26,10 +28,12 @@ type alias Config a =
 
 
 svg : Config a -> Nonempty a -> Svg msg
-svg { width, height, margin, getX, getY, getR } xs =
+svg { width, height, margin, extent, getX, getY, getR } xs =
     let
         { xmin, xmax, ymin, ymax } =
-            extent getX getY xs
+            extent
+              <| Extent.bufferY 0.05
+              <| Extent.extent { getX = getX, getY = getY } xs
 
         xscale : ContinuousScale
         xscale =
@@ -101,44 +105,3 @@ svg { width, height, margin, getX, getY, getR } xs =
                 , Svg.g [] (List.map draw <| Nonempty.toList xs)
                 ]
             ]
-
-
-type alias Extent =
-    { xmin : Float
-    , xmax : Float
-    , ymin : Float
-    , ymax : Float
-    }
-
-
-extent : (a -> Float) -> (a -> Float) -> Nonempty a -> Extent
-extent getX getY (Nonempty v0 vs) =
-    let
-        x0 : Float
-        x0 =
-            getX v0
-
-        y0 : Float
-        y0 =
-            getY v0
-
-        step : a -> Extent -> Extent
-        step v { xmin, xmax, ymin, ymax } =
-            let
-                x : Float
-                x =
-                    getX v
-
-                y : Float
-                y =
-                    getY v
-            in
-                { xmin = min xmin x
-                , xmax = max xmax x
-                , ymin = min ymin y
-                , ymax = max ymax y
-                }
-    in
-        List.foldl step
-            { xmin = x0, xmax = x0, ymin = y0, ymax = y0 }
-            vs

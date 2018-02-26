@@ -3,6 +3,11 @@ module Daffy.List.Extra exposing (..)
 import List.Nonempty as Nonempty exposing (Nonempty(Nonempty))
 
 
+cons : a -> List a -> List a
+cons =
+    (::)
+
+
 groupBy : (a -> a -> Bool) -> List a -> List (Nonempty a)
 groupBy f =
     List.foldr

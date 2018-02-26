@@ -1,13 +1,15 @@
 module Main exposing (..)
 
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
+import Daffy.Html exposing (checkbox, radio, textInput)
+import Daffy.List.Extra as List
 import Daffy.Scatterplot
 import Daffy.Setters exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
 import Array exposing (Array)
 import Html exposing (..)
-import Html.Attributes exposing (..)
+import Html.Attributes exposing (checked, class, type_)
 import Html.Events
 import Json.Decode exposing (..)
 import Json.Encode
@@ -155,14 +157,14 @@ update msg model =
         RunCommand ->
             model
                 |> over runsS
-                    (\runs ->
-                        RunningProgram
+                    (List.cons
+                        (RunningProgram
                             model.runSpec
                             { output = Array.empty
                             , stats = Nothing
                             , flamegraphs = []
                             }
-                            :: runs
+                        )
                     )
                 |> Step.to
                 |> Step.withCmd
@@ -368,32 +370,25 @@ view ({ runSpec } as model) =
                             [ class "inline-label" ]
                             [ text "Collect oldest generation by" ]
                         , fieldset [] <|
-                            let
-                                when b x =
-                                    if b then
-                                        Just x
-                                    else
-                                        Nothing
-                            in
-                                List.concat
-                                    [ radio "Copying"
-                                        (runSpec.compaction == False)
-                                        (when (runSpec.compaction == True) ToggleCompaction)
-                                    , radio "Compacting"
-                                        (runSpec.compaction == True)
-                                        (when (runSpec.compaction == False) ToggleCompaction)
-                                    ]
+                            List.concat
+                                [ radio "Copying"
+                                    (runSpec.compaction == False)
+                                    ToggleCompaction
+                                , radio "Compacting"
+                                    (runSpec.compaction == True)
+                                    ToggleCompaction
+                                ]
                         ]
                     , div [ class "form-group" ]
                         [ label
                             [ class "inline-label" ]
-                            (checkbox "stats" runSpec.stats (\_ -> ToggleStats) [])
+                            (checkbox "stats" runSpec.stats ToggleStats [])
                         , label
                             [ class "inline-label" ]
-                            (checkbox "profile" runSpec.prof (\_ -> ToggleProf) [])
+                            (checkbox "profile" runSpec.prof ToggleProf [])
                         , label
                             [ class "inline-label" ]
-                            (checkbox "eventlog" runSpec.eventlog (\_ -> ToggleEventlog) [])
+                            (checkbox "eventlog" runSpec.eventlog ToggleEventlog [])
                         ]
                     , div [ class "form-group" ]
                         [ input
@@ -422,50 +417,6 @@ view ({ runSpec } as model) =
                 _ ->
                     []
             ]
-
-
-textInput : String -> (String -> a) -> List (Attribute a) -> Html a
-textInput value message attributes =
-    input
-        (type_ "text"
-            :: Html.Attributes.value value
-            :: Html.Events.onInput message
-            :: attributes
-        )
-        []
-
-
-checkbox : String -> Bool -> (Bool -> a) -> List (Attribute a) -> List (Html a)
-checkbox value checked message attributes =
-    [ input
-        (type_ "checkbox"
-            :: Html.Attributes.checked checked
-            :: Html.Events.onCheck message
-            :: attributes
-        )
-        []
-    , text value
-    ]
-
-
-radio : String -> Bool -> Maybe a -> List (Html a)
-radio value isChecked msg =
-    let
-        id =
-            "radio-" ++ value
-    in
-        [ input
-            [ type_ "radio"
-            , checked isChecked
-            , Maybe.map Html.Events.onClick msg
-                |> Maybe.withDefault (Html.Events.on "nothing" (Json.Decode.fail "fake event"))
-            , Html.Attributes.id id
-            ]
-            []
-        , label [ Html.Attributes.for id ]
-            [ text value
-            ]
-        ]
 
 
 viewPreview : RunSpec -> Html a
@@ -563,9 +514,10 @@ viewBytesAllocatedSvg =
         { width = width
         , height = height
         , margin = margin
+        , extent = set xminS 0 >> over yminS (max 0)
         , getX = .time
         , getY = \x -> toFloat (x.bytesAllocated // x.count)
-        , getR = \x -> 2 * (x.generation + 1)
+        , getR = \x -> x.generation + 2
         }
 
 
@@ -575,9 +527,10 @@ viewBytesCopiedSvg =
         { width = width
         , height = height
         , margin = margin
+        , extent = set xminS 0 >> over yminS (max 0)
         , getX = .time
         , getY = \x -> toFloat (x.bytesCopied // x.count)
-        , getR = \x -> 2 * (x.generation + 1)
+        , getR = \x -> x.generation + 2
         }
 
 
@@ -587,9 +540,10 @@ viewLiveBytesSvg =
         { width = width
         , height = height
         , margin = margin
+        , extent = set xminS 0 >> over yminS (max 0)
         , getX = .time
         , getY = \x -> toFloat (x.liveBytes // x.count)
-        , getR = \x -> 2 * (x.generation + 1)
+        , getR = \x -> x.generation + 2
         }
 
 
@@ -599,7 +553,8 @@ viewNumGCsSvg =
         { width = width
         , height = height
         , margin = margin
+        , extent = set xminS 0 >> over yminS (max 0)
         , getX = .time
         , getY = toFloat << .count
-        , getR = \x -> 2 * (x.generation + 1)
+        , getR = \x -> x.generation + 2
         }
