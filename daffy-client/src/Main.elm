@@ -435,7 +435,7 @@ viewFlagsRequired spec =
 
 viewOutput : Array Output -> Html a
 viewOutput lines =
-    div [ class "ps1" ]
+    div [ class "program-output" ]
         (lines
             |> Array.toList
             |> List.map (p [] << List.singleton << text << .line)
