@@ -10,8 +10,11 @@
 #
 #   fooS : (a -> b) -> { r | foo : a } -> { r | foo : b }
 
+bytesAllocated
+bytesCopied
 command
 compaction
+count
 eventlog
 largeObjectSize
 nurseryChunks

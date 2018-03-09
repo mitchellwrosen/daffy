@@ -38,7 +38,7 @@ main =
         -- Start watching the filesystem, and rebuild once some file that shake
         -- considered alive changes (it writes these files to ".shake/live").
         cwd <- getCurrentDirectory
-        files <- Set.fromList . map ((cwd ++) . ('/':)) . lines <$> readFile ".shake/live"
+        files <- Set.fromList . map (cwd </>) . lines <$> readFile ".shake/live"
         withManager $ \manager -> do
           chan <- newChan
           void (watchTreeChan manager "." ((`elem` files) . eventPath) chan)
@@ -161,7 +161,7 @@ rules stack = do
       : gitmodulesStamp
       : files
       )
-    cmd_ ("elm make --debug daffy-client/src/Main.elm --output=" ++ out)
+    cmd_ ("elm make daffy-client/src/Main.elm --output=" ++ out)
 
 parseElmPackageJson :: ByteString -> Action (HashMap Text Value)
 parseElmPackageJson bytes =

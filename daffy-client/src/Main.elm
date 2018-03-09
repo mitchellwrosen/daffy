@@ -1,14 +1,17 @@
 module Main exposing (..)
 
+import Array exposing (Array)
+import Daffy.Basics exposing (..)
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
 import Daffy.Html exposing (checkbox, radio, textInput)
 import Daffy.List.Extra as List
 import Daffy.Proto.RunReq
+import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Scatterplot
 import Daffy.Setters exposing (..)
-import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Types exposing (..)
-import Array exposing (Array)
+import FormatNumber
+import FormatNumber.Locales exposing (usLocale)
 import Html exposing (..)
 import Html.Attributes exposing (checked, class, type_)
 import Html.Events
@@ -457,7 +460,9 @@ viewStats stats =
         Just elapsedTimeGCs ->
             div []
                 [ viewBytesAllocatedSvg elapsedTimeGCs
+                , viewTotalBytesAllocatedSvg elapsedTimeGCs
                 , viewBytesCopiedSvg elapsedTimeGCs
+                , viewTotalBytesCopiedSvg elapsedTimeGCs
                 , viewLiveBytesSvg elapsedTimeGCs
                 , viewNumGCsSvg elapsedTimeGCs
 
@@ -490,72 +495,126 @@ viewStats stats =
 
 
 width =
-    800
+    1100
 
 
 height =
     500
 
 
-margin =
-    { bottom = 25
-    , top = 10
-    , left = 60
-    , right = 20
-    }
+formatSeconds : Float -> String
+formatSeconds =
+    FormatNumber.format FormatNumber.Locales.usLocale
+
+
+formatBytes : Float -> String
+formatBytes x =
+    let
+        y =
+            x / 1024
+    in
+        if y >= 1024 then
+            toString (round (y / 1024)) ++ "M"
+        else
+            toString (round y) ++ "K"
 
 
 viewBytesAllocatedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
 viewBytesAllocatedSvg =
     Daffy.Scatterplot.svg
-        { width = width
+        { title = "Bytes allocated during GC"
+        , width = width
         , height = height
-        , margin = margin
         , extent = set xminS 0 >> over yminS (max 0)
         , line = False
         , getX = .time
-        , getY = \x -> toFloat (x.bytesAllocated // x.count)
-        , getR = \x -> x.generation + 2
+        , getY = \x -> toFloat x.bytesAllocated
+        , getR = \x -> x.generation + 1
+        , showX = formatSeconds
+        , showY = formatBytes
         }
+
+
+viewTotalBytesAllocatedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewTotalBytesAllocatedSvg =
+    Daffy.Scatterplot.svg
+        { title = "Total bytes allocated during GC"
+        , width = width
+        , height = height
+        , extent = set xminS 0 >> over yminS (max 0)
+        , line = True
+        , getX = .time
+        , getY = \x -> toFloat x.bytesAllocated
+        , getR = \x -> x.generation + 1
+        , showX = formatSeconds
+        , showY = formatBytes
+        }
+        << Nonempty.scanl1
+            (\x y -> over bytesAllocatedS (add y.bytesAllocated) x)
 
 
 viewBytesCopiedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
 viewBytesCopiedSvg =
     Daffy.Scatterplot.svg
-        { width = width
+        { title = "Bytes copied during GC"
+        , width = width
         , height = height
-        , margin = margin
         , extent = set xminS 0 >> over yminS (max 0)
         , line = False
         , getX = .time
-        , getY = \x -> toFloat (x.bytesCopied // x.count)
-        , getR = \x -> x.generation + 2
+        , getY = \x -> toFloat x.bytesCopied
+        , getR = \x -> x.generation + 1
+        , showX = formatSeconds
+        , showY = formatBytes
         }
+
+
+viewTotalBytesCopiedSvg : Nonempty ElapsedTimeGCStats -> Svg msg
+viewTotalBytesCopiedSvg =
+    Daffy.Scatterplot.svg
+        { title = "Total bytes copied during GC"
+        , width = width
+        , height = height
+        , extent = set xminS 0 >> over yminS (max 0)
+        , line = True
+        , getX = .time
+        , getY = \x -> toFloat x.bytesCopied
+        , getR = \x -> x.generation + 1
+        , showX = formatSeconds
+        , showY = formatBytes
+        }
+        << Nonempty.scanl1 (\x y -> over bytesCopiedS (add y.bytesCopied) x)
 
 
 viewLiveBytesSvg : Nonempty ElapsedTimeGCStats -> Svg msg
 viewLiveBytesSvg =
     Daffy.Scatterplot.svg
-        { width = width
+        { title = "Live bytes"
+        , width = width
         , height = height
-        , margin = margin
         , extent = set xminS 0 >> over yminS (max 0)
         , line = True
         , getX = .time
         , getY = \x -> toFloat (x.liveBytes // x.count)
-        , getR = \x -> x.generation + 2
+        , getR = always 1
+        , showX = formatSeconds
+        , showY = formatBytes
         }
 
 
 viewNumGCsSvg : Nonempty ElapsedTimeGCStats -> Svg msg
 viewNumGCsSvg =
     Daffy.Scatterplot.svg
-        { width = width
+        { title = "Total number of GCs"
+        , width = width
         , height = height
-        , margin = margin
         , extent = set xminS 0 >> over yminS (max 0)
         , line = False
         , getX = .time
         , getY = toFloat << .count
-        , getR = \x -> x.generation + 2
+        , getR = always 1
+        , showX = formatSeconds
+        , showY =
+            FormatNumber.format { usLocale | decimals = 0 }
         }
+        << Nonempty.scanl1 (\x y -> over countS (add y.count) x)
