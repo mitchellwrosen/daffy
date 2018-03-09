@@ -4,7 +4,6 @@ import Array exposing (Array)
 import Daffy.Basics exposing (..)
 import Daffy.ElapsedTimeGCStats exposing (ElapsedTimeGCStats)
 import Daffy.Html exposing (checkbox, radio, textInput)
-import Daffy.List.Extra as List
 import Daffy.Proto.RunReq
 import Daffy.RunSpec exposing (RunSpec)
 import Daffy.Scatterplot
@@ -16,27 +15,10 @@ import Html exposing (..)
 import Html.Attributes exposing (checked, class, type_)
 import Html.Events
 import Json.Decode exposing (..)
-import Json.Encode
-import LineChart
-import LineChart.Area as Area
-import LineChart.Axis as Axis
-import LineChart.Axis.Intersection as Intersection
-import LineChart.Container as Container
-import LineChart.Dots as Dots
-import LineChart.Events as Events
-import LineChart.Grid as Grid
-import LineChart.Interpolation as Interpolation
-import LineChart.Junk as Junk
-import LineChart.Legends as Legends
-import LineChart.Line as Line
-import List.Extra as List
 import List.Nonempty as Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
 import Step exposing (Step)
 import Svg exposing (Svg)
-import Svg.Attributes
-import Visualization.Axis as VAxis
-import Visualization.Scale as VScale exposing (ContinuousScale)
 import WebSocket
 
 
@@ -51,17 +33,26 @@ main =
 
 
 type alias Model =
-    { runSpec : RunSpec, runs : List ProgramRun }
+    { runSpec : RunSpec
+    , runs : List ProgramRun
+    }
 
 
-type ProgramRun
-    = RunningProgram RunSpec ProgramOutput
-    | MsgParseError RunSpec ProgramOutput String
-    | ExploringRun RunSpec ProgramOutput { exitCode : Int }
+type alias ProgramRun =
+    { spec : RunSpec
+    , output : ProgramOutput
+    , state : RunState
+    }
+
+
+type RunState
+    = RunningProgram
+    | MsgParseError String
+    | ExploringRun { exitCode : Int }
 
 
 type alias ProgramOutput =
-    { output : Array Output
+    { lines : Array Output
     , stats : Maybe Stats
     , flamegraphs : List SvgPath
     }
@@ -140,36 +131,34 @@ update msg model =
 
         RunningProgramMsg runningProgramMsg ->
             case model.runs of
-                (RunningProgram runSpec programOutput) :: moreRuns ->
-                    stepRunningProgram runningProgramMsg programOutput
-                        |> Step.map (RunningProgram runSpec)
-                        |> Step.onExit
-                            (\o ->
-                                Step.to <|
-                                    case o of
-                                        Ok exitCode ->
-                                            ExploringRun runSpec programOutput exitCode
+                firstRun :: moreRuns ->
+                    Step.map (\x -> { model | runs = x :: moreRuns }) <|
+                        case firstRun.state of
+                            RunningProgram ->
+                                stepRunningProgram runningProgramMsg firstRun.output
+                                    |> Step.map (\output -> { firstRun | output = output })
+                                    |> Step.onExit
+                                        (\o ->
+                                            Step.to <|
+                                                case o of
+                                                    Ok exitCode ->
+                                                        { firstRun | state = ExploringRun exitCode }
 
-                                        Err parseErr ->
-                                            MsgParseError runSpec programOutput parseErr
-                            )
-                        |> Step.map (\x -> { model | runs = x :: moreRuns })
+                                                    Err parseErr ->
+                                                        { firstRun | state = MsgParseError parseErr }
+                                        )
+
+                            _ ->
+                                Step.noop
 
                 _ ->
                     Step.noop
 
         RunCommand ->
-            model
-                |> over runsS
-                    (List.cons
-                        (RunningProgram
-                            model.runSpec
-                            { output = Array.empty
-                            , stats = Nothing
-                            , flamegraphs = []
-                            }
-                        )
-                    )
+            { model
+                | runSpec = model.runSpec
+                , runs = { state = RunningProgram, spec = model.runSpec, output = { lines = Array.empty, stats = Nothing, flamegraphs = [] } } :: model.runs
+            }
                 |> Step.to
                 |> Step.withCmd
                     (model.runSpec
@@ -215,8 +204,8 @@ configureRun runMsg =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    case List.head model.runs of
-        Just (RunningProgram runningProgram _) ->
+    case List.head model.runs |> Maybe.map .state of
+        Just RunningProgram ->
             Sub.map RunningProgramMsg <|
                 WebSocket.listen "ws://localhost:8080"
                     (\raw ->
@@ -279,7 +268,7 @@ stepRunningProgram : RunningProgramMsg -> ProgramOutput -> Step ProgramOutput ms
 stepRunningProgram programRunMsg programOutput =
     case programRunMsg of
         OutputMsg line ->
-            Step.to { programOutput | output = Array.push line programOutput.output }
+            Step.to { programOutput | lines = Array.push line programOutput.lines }
 
         ExitedWith code ->
             Step.exit (Ok { exitCode = code })
@@ -402,17 +391,19 @@ view ({ runSpec } as model) =
               , viewFlagsRequired runSpec
               ]
             , case List.head model.runs of
-                Just (RunningProgram programData programOutput) ->
-                    [ viewOutput programOutput ]
+                Just { spec, output, state } ->
+                    case state of
+                        RunningProgram ->
+                            [ viewOutput output.lines ]
 
-                Just (MsgParseError _ _ parseError) ->
-                    [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
+                        MsgParseError parseError ->
+                            [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                Just (ExploringRun runSpec programOutput exitCode) ->
-                    [ viewOutput programOutput ]
-                        ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
-                            programOutput.flamegraphs
-                        ++ Maybe.unwrap [] (List.singleton << viewStats) programOutput.stats
+                        ExploringRun exitCode ->
+                            [ viewOutput output.lines ]
+                                ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
+                                    output.flamegraphs
+                                ++ Maybe.unwrap [] (List.singleton << viewStats) output.stats
 
                 _ ->
                     []
@@ -442,10 +433,10 @@ viewFlagsRequired spec =
                 ]
 
 
-viewOutput : { r | output : Array Output } -> Html a
-viewOutput { output } =
+viewOutput : Array Output -> Html a
+viewOutput lines =
     div [ class "ps1" ]
-        (output
+        (lines
             |> Array.toList
             |> List.map (p [] << List.singleton << text << .line)
         )
@@ -494,10 +485,12 @@ viewStats stats =
 --     }
 
 
+width : number
 width =
     1100
 
 
+height : number
 height =
     500
 
