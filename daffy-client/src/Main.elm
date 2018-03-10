@@ -15,8 +15,10 @@ import Html exposing (..)
 import Html.Attributes exposing (checked, class, type_)
 import Html.Events
 import Json.Decode exposing (..)
+import List.Extra
 import List.Nonempty as Nonempty exposing (Nonempty)
 import Maybe.Extra as Maybe
+import Set exposing (Set)
 import Step exposing (Step)
 import Svg exposing (Svg)
 import WebSocket
@@ -48,7 +50,7 @@ type alias ProgramRun =
 type RunState
     = RunningProgram
     | MsgParseError String
-    | ExploringRun { exitCode : Int }
+    | ExploringRun { exitCode : Int, visibleGens : Set Int }
 
 
 type alias ProgramOutput =
@@ -72,6 +74,8 @@ type Msg
     = ConfigureRun ConfigureRunMsg
     | RunCommand
     | RunningProgramMsg RunningProgramMsg
+    | ToggleGen Int
+    | SelectAllGens
 
 
 type ConfigureRunMsg
@@ -89,12 +93,6 @@ type ConfigureRunMsg
 
 type alias Index =
     Int
-
-
-type RunExplorationMsg
-    = TypeFilter String
-    | DeleteFilter
-    | ConfirmFilter
 
 
 type RunningProgramMsg
@@ -132,24 +130,38 @@ update msg model =
         RunningProgramMsg runningProgramMsg ->
             case model.runs of
                 firstRun :: moreRuns ->
-                    Step.map (\x -> { model | runs = x :: moreRuns }) <|
-                        case firstRun.state of
-                            RunningProgram ->
-                                stepRunningProgram runningProgramMsg firstRun.output
-                                    |> Step.map (\output -> { firstRun | output = output })
-                                    |> Step.onExit
-                                        (\o ->
-                                            Step.to <|
-                                                case o of
-                                                    Ok exitCode ->
-                                                        { firstRun | state = ExploringRun exitCode }
+                    let
+                        initExploration res =
+                            case res of
+                                Ok { exitCode } ->
+                                    { firstRun
+                                        | state =
+                                            ExploringRun
+                                                { exitCode = exitCode
+                                                , visibleGens =
+                                                    firstRun.output.stats
+                                                        |> Maybe.map
+                                                            (.generationSummaries
+                                                                >> List.length
+                                                                >> List.range 0
+                                                                >> Set.fromList
+                                                            )
+                                                        |> Maybe.withDefault Set.empty
+                                                }
+                                    }
 
-                                                    Err parseErr ->
-                                                        { firstRun | state = MsgParseError parseErr }
-                                        )
+                                Err parseErr ->
+                                    { firstRun | state = MsgParseError parseErr }
+                    in
+                        Step.map (\x -> { model | runs = x :: moreRuns }) <|
+                            case firstRun.state of
+                                RunningProgram ->
+                                    stepRunningProgram runningProgramMsg firstRun.output
+                                        |> Step.map (\programOutput -> { firstRun | output = programOutput })
+                                        |> Step.onExit (Step.to << initExploration)
 
-                            _ ->
-                                Step.noop
+                                _ ->
+                                    Step.noop
 
                 _ ->
                     Step.noop
@@ -166,6 +178,62 @@ update msg model =
                         |> Daffy.Proto.RunReq.encode
                         |> WebSocket.send "ws://localhost:8080"
                     )
+
+        ToggleGen gen ->
+            model
+                |> mapExploringRun
+                    (\_ exploringRunData ->
+                        { exploringRunData
+                            | visibleGens =
+                                if Set.member gen exploringRunData.visibleGens then
+                                    Set.remove gen exploringRunData.visibleGens
+                                else
+                                    Set.insert gen exploringRunData.visibleGens
+                        }
+                    )
+
+        SelectAllGens ->
+            model
+                |> mapExploringRun
+                    (\output erd ->
+                        { erd
+                            | visibleGens =
+                                output.stats
+                                    |> Maybe.map
+                                        (.generationSummaries
+                                            >> List.length
+                                            >> List.range 0
+                                            >> Set.fromList
+                                        )
+                                    |> Maybe.withDefault Set.empty
+                        }
+                    )
+
+
+maybeStep : Maybe a -> Step a msg o
+maybeStep aMaybe =
+    case aMaybe of
+        Just a ->
+            Step.to a
+
+        Nothing ->
+            Step.noop
+
+
+mapExploringRun : (ProgramOutput -> { exitCode : Int, visibleGens : Set Int } -> { exitCode : Int, visibleGens : Set Int }) -> Model -> Step Model msg o
+mapExploringRun f model =
+    model.runs
+        |> List.Extra.uncons
+        |> Maybe.andThen
+            (\( run, runs ) ->
+                case run.state of
+                    ExploringRun erd ->
+                        Just { model | runs = { run | state = ExploringRun (f run.output erd) } :: runs }
+
+                    _ ->
+                        Nothing
+            )
+        |> maybeStep
 
 
 configureRun : ConfigureRunMsg -> RunSpec -> RunSpec
