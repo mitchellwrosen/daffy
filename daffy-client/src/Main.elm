@@ -141,9 +141,7 @@ update msg model =
                                                 , visibleGens =
                                                     firstRun.output.stats
                                                         |> Maybe.map
-                                                            (.generationSummaries
-                                                                >> List.length
-                                                                >> List.range 0
+                                                            (generations
                                                                 >> Set.fromList
                                                             )
                                                         |> Maybe.withDefault Set.empty
@@ -182,13 +180,13 @@ update msg model =
         ToggleGen gen ->
             model
                 |> mapExploringRun
-                    (\_ exploringRunData ->
+                    (\_ ({ visibleGens } as exploringRunData) ->
                         { exploringRunData
                             | visibleGens =
-                                if Set.member gen exploringRunData.visibleGens then
-                                    Set.remove gen exploringRunData.visibleGens
+                                if Set.member gen visibleGens && (Set.size visibleGens > 1) then
+                                    Set.remove gen visibleGens
                                 else
-                                    Set.insert gen exploringRunData.visibleGens
+                                    Set.insert gen visibleGens
                         }
                     )
 
@@ -199,15 +197,15 @@ update msg model =
                         { erd
                             | visibleGens =
                                 output.stats
-                                    |> Maybe.map
-                                        (.generationSummaries
-                                            >> List.length
-                                            >> List.range 0
-                                            >> Set.fromList
-                                        )
+                                    |> Maybe.map (generations >> Set.fromList)
                                     |> Maybe.withDefault Set.empty
                         }
                     )
+
+
+generations : Stats -> List Int
+generations { generationSummaries } =
+    List.range 0 <| List.length generationSummaries - 1
 
 
 maybeStep : Maybe a -> Step a msg o
@@ -467,11 +465,16 @@ view ({ runSpec } as model) =
                         MsgParseError parseError ->
                             [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                        ExploringRun exitCode ->
+                        ExploringRun { visibleGens, exitCode } ->
                             [ viewOutput output.lines ]
-                                ++ List.map (\path -> object [ class "flame-svg", Html.Attributes.attribute "data" path ] [])
+                                ++ List.map
+                                    (\path ->
+                                        object
+                                            [ class "flame-svg", Html.Attributes.attribute "data" path ]
+                                            []
+                                    )
                                     output.flamegraphs
-                                ++ Maybe.unwrap [] (List.singleton << viewStats) output.stats
+                                ++ Maybe.unwrap [] (List.singleton << viewStats visibleGens) output.stats
 
                 _ ->
                     []
@@ -510,15 +513,20 @@ viewOutput lines =
         )
 
 
-viewStats : Stats -> Html msg
-viewStats stats =
-    case Nonempty.fromList (Daffy.ElapsedTimeGCStats.make stats.garbageCollections) of
+viewStats : Set Int -> Stats -> Html Msg
+viewStats visibleGens stats =
+    case
+        Daffy.ElapsedTimeGCStats.make stats.garbageCollections
+            |> List.filter (.generation >> \x -> Set.member x visibleGens)
+            |> Nonempty.fromList
+    of
         Nothing ->
             text ""
 
         Just elapsedTimeGCs ->
             div []
-                [ viewBytesAllocatedSvg elapsedTimeGCs
+                [ generationPicker visibleGens stats
+                , viewBytesAllocatedSvg elapsedTimeGCs
                 , viewTotalBytesAllocatedSvg elapsedTimeGCs
                 , viewBytesCopiedSvg elapsedTimeGCs
                 , viewTotalBytesCopiedSvg elapsedTimeGCs
@@ -533,6 +541,23 @@ viewStats stats =
                 --     ]
                 -- , div [] [ text <| "Length: " ++ toString (List.length timeBucketedGCs) ]
                 ]
+
+
+generationPicker : Set Int -> Stats -> Html Msg
+generationPicker visibleGens stats =
+    generations stats
+        |> List.concatMap
+            (\gen ->
+                let
+                    isChecked =
+                        Set.member gen visibleGens
+                in
+                    checkbox ("Generation " ++ toString gen)
+                        isChecked
+                        (ToggleGen gen)
+                        [ Html.Attributes.disabled (isChecked && (Set.size visibleGens == 1)) ]
+            )
+        |> div [ class "generation_picker" ]
 
 
 
