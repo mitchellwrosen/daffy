@@ -1,14 +1,14 @@
 module Daffy.Model exposing (..)
 
 import Array exposing (Array)
-import Daffy.Types exposing (..)
+import Daffy.Proto.RunReq exposing (..)
 import Daffy.RunSpec exposing (RunSpec)
+import Daffy.Setters exposing (..)
+import Daffy.Types exposing (..)
+import List.Extra
 import Set exposing (Set)
 import Step exposing (Step)
-import Daffy.Proto.RunReq exposing (..)
 import WebSocket
-import List.Extra
-import Daffy.Setters exposing (..)
 
 
 type alias Model =
@@ -27,7 +27,16 @@ type alias ProgramRun =
 type RunState
     = RunningProgram
     | MsgParseError String
-    | ExploringRun { exitCode : Int, visibleGens : Set Int }
+    | ExploringRun { exitCode : Int } ChartState
+
+
+type alias ChartState =
+    { bytesAllocated : Set Int
+    , totalBytesAllocated : Set Int
+    , bytesCopied : Set Int
+    , totalBytesCopied : Set Int
+    , liveBytes : Set Int
+    }
 
 
 type alias ParseErr =
@@ -55,8 +64,16 @@ type Msg
     = ConfigureRun ConfigureRunMsg
     | RunCommand
     | RunningProgramMsg RunningProgramMsg
-    | ToggleGen Int
-    | SelectAllGens
+    | ToggleGen Chart Int
+    | SelectAllGens Chart
+
+
+type Chart
+    = BytesAllocated
+    | TotalBytesAllocated
+    | BytesCopied
+    | TotalBytesCopied
+    | LiveBytes
 
 
 type ConfigureRunMsg
@@ -118,19 +135,15 @@ update msg model =
                                     { firstRun
                                         | state =
                                             ExploringRun
-                                                { exitCode = exitCode
-                                                , visibleGens =
-                                                    firstRun.output.stats
-                                                        |> Maybe.map
-                                                            (generations
-                                                                >> Set.fromList
-                                                            )
-                                                        |> Maybe.withDefault Set.empty
-                                                }
+                                                { exitCode = exitCode }
+                                                (ChartState allGens allGens allGens allGens allGens)
                                     }
 
                                 Err parseErr ->
                                     { firstRun | state = MsgParseError parseErr }
+
+                        allGens =
+                            generationSet firstRun.output
                     in
                         Step.map (\x -> { model | runs = x :: moreRuns }) <|
                             case firstRun.state of
@@ -158,35 +171,59 @@ update msg model =
                         |> WebSocket.send "ws://localhost:8080"
                     )
 
-        ToggleGen gen ->
-            model
-                |> mapExploringRun
-                    (\_ ({ visibleGens } as exploringRunData) ->
-                        { exploringRunData
-                            | visibleGens =
-                                if Set.member gen visibleGens && (Set.size visibleGens > 1) then
-                                    Set.remove gen visibleGens
-                                else
-                                    Set.insert gen visibleGens
-                        }
-                    )
+        ToggleGen chart gen ->
+            let
+                updateGens visibleGens =
+                    if Set.member gen visibleGens && (Set.size visibleGens > 1) then
+                        Set.remove gen visibleGens
+                    else
+                        Set.insert gen visibleGens
+            in
+                mapExploringRun
+                    (\_ chartState -> mapChart chart updateGens chartState)
+                    model
 
-        SelectAllGens ->
-            model
-                |> mapExploringRun
-                    (\output erd ->
-                        { erd
-                            | visibleGens =
-                                output.stats
-                                    |> Maybe.map (generations >> Set.fromList)
-                                    |> Maybe.withDefault Set.empty
-                        }
-                    )
+        SelectAllGens chart ->
+            mapExploringRun
+                (\output chartState -> mapChart chart (\_ -> generationSet output) chartState)
+                model
 
 
-generations : Stats -> List Int
-generations { generationSummaries } =
-    List.range 0 <| List.length generationSummaries - 1
+mapChart : Chart -> (Set Int -> Set Int) -> ChartState -> ChartState
+mapChart chart f chartState =
+    case chart of
+        LiveBytes ->
+            over liveBytesS f chartState
+
+        BytesAllocated ->
+            over bytesAllocatedS f chartState
+
+        TotalBytesAllocated ->
+            over totalBytesAllocatedS f chartState
+
+        BytesCopied ->
+            over bytesCopiedS f chartState
+
+        TotalBytesCopied ->
+            over totalBytesCopiedS f chartState
+
+
+{-| get a set wth the one entry per generation
+-}
+generationSet : ProgramOutput -> Set Int
+generationSet output =
+    case output.stats of
+        Just stats ->
+            generations stats
+                |> Set.fromList
+
+        Nothing ->
+            Set.empty
+
+
+generations : { b | generationSummaries : List a } -> List Int
+generations stats =
+    List.range 0 (List.length stats.generationSummaries - 1)
 
 
 maybeStep : Maybe a -> Step a msg o
@@ -199,15 +236,15 @@ maybeStep aMaybe =
             Step.noop
 
 
-mapExploringRun : (ProgramOutput -> { exitCode : Int, visibleGens : Set Int } -> { exitCode : Int, visibleGens : Set Int }) -> Model -> Step Model msg o
+mapExploringRun : (ProgramOutput -> ChartState -> ChartState) -> Model -> Step Model msg o
 mapExploringRun f model =
     model.runs
         |> List.Extra.uncons
         |> Maybe.andThen
             (\( run, runs ) ->
                 case run.state of
-                    ExploringRun erd ->
-                        Just { model | runs = { run | state = ExploringRun (f run.output erd) } :: runs }
+                    ExploringRun ex chartState ->
+                        Just { model | runs = { run | state = ExploringRun ex (f run.output chartState) } :: runs }
 
                     _ ->
                         Nothing

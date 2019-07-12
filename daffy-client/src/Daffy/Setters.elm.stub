@@ -11,7 +11,10 @@
 #   fooS : (a -> b) -> { r | foo : a } -> { r | foo : b }
 
 bytesAllocated
+totalBytesAllocated
 bytesCopied
+totalBytesCopied
+liveBytes
 command
 compaction
 count

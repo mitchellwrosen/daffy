@@ -207,7 +207,7 @@ view ({ runSpec } as model) =
                         MsgParseError parseError ->
                             [ div [] [ text <| "error parsing messages from daffy: " ++ parseError ] ]
 
-                        ExploringRun { visibleGens, exitCode } ->
+                        ExploringRun { exitCode } chartState ->
                             [ viewOutput output.lines ]
                                 ++ List.map
                                     (\path ->
@@ -216,7 +216,7 @@ view ({ runSpec } as model) =
                                             []
                                     )
                                     output.flamegraphs
-                                ++ Maybe.unwrap [] (List.singleton << viewStats visibleGens) output.stats
+                                ++ Maybe.unwrap [] (List.singleton << viewStats chartState) output.stats
 
                 _ ->
                     []
@@ -255,11 +255,15 @@ viewOutput lines =
         )
 
 
-viewStats : Set Int -> Stats -> Html Msg
-viewStats visibleGens stats =
+filterNonempty : (a -> Bool) -> Nonempty a -> Maybe (Nonempty a)
+filterNonempty f ne =
+    Nonempty.toList ne |> List.filter f |> Nonempty.fromList
+
+
+viewStats : ChartState -> Stats -> Html Msg
+viewStats chartState stats =
     case
         Daffy.ElapsedTimeGCStats.make stats.garbageCollections
-            |> List.filter (.generation >> \x -> Set.member x visibleGens)
             |> Nonempty.fromList
     of
         Nothing ->
@@ -267,8 +271,7 @@ viewStats visibleGens stats =
 
         Just elapsedTimeGCs ->
             div []
-                [ generationPicker visibleGens stats
-                , viewBytesAllocatedSvg elapsedTimeGCs
+                [ viewBytesAllocatedSvg elapsedTimeGCs
                 , viewTotalBytesAllocatedSvg elapsedTimeGCs
                 , viewBytesCopiedSvg elapsedTimeGCs
                 , viewTotalBytesCopiedSvg elapsedTimeGCs
@@ -285,8 +288,8 @@ viewStats visibleGens stats =
                 ]
 
 
-generationPicker : Set Int -> Stats -> Html Msg
-generationPicker visibleGens stats =
+generationPicker : Chart -> Set Int -> Stats -> Html Msg
+generationPicker chart visibleGens stats =
     generations stats
         |> List.concatMap
             (\gen ->
@@ -296,7 +299,7 @@ generationPicker visibleGens stats =
                 in
                     checkbox ("Generation " ++ toString gen)
                         isChecked
-                        (ToggleGen gen)
+                        (ToggleGen chart gen)
                         [ Html.Attributes.disabled (isChecked && (Set.size visibleGens == 1)) ]
             )
         |> div [ class "generation_picker" ]
